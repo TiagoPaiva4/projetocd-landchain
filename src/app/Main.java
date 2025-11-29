@@ -97,9 +97,8 @@ public class Main {
             
             RWAExplorer explorer = new RWAExplorer(bc, oracle, validator);
             
-            // >>>>>> LINHA IMPORTANTE <<<<<<
-            // Liga a camada visual à camada de rede para permitir broadcast
             explorer.setNode(node); 
+            explorer.setRegistry(registry); // <--- ADICIONA ISTO (Se quiseres ver saldos no menu)
             
             explorer.start();
 

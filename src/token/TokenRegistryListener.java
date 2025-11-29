@@ -1,17 +1,8 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package token;
 
 import events.Event;
 import events.EventListener;
 import events.NewRwaRegisteredEvent;
-
-/**
- *
- * @author Tiago Paiva
- */
 
 public class TokenRegistryListener implements EventListener {
 
@@ -22,10 +13,15 @@ public class TokenRegistryListener implements EventListener {
     }
 
     @Override
-    public void onEvent(Event event) {
-        if (event instanceof NewRwaRegisteredEvent e) {
-            registry.mintTokensForRwa(e.getRecord());
+    public void onEvent(Event newEvent) {
+        // Verifica se o evento é do tipo certo
+        if (newEvent instanceof NewRwaRegisteredEvent) {
+            
+            // Faz o "Cast" (converte) para o tipo específico
+            NewRwaRegisteredEvent e = (NewRwaRegisteredEvent) newEvent;
+            
+            // Agora o método getAssetID() já vai ser encontrado após o "Clean and Build"
+            System.out.println("Listener: Detetado novo RWA registado: " + e.getAssetID());
         }
     }
 }
-

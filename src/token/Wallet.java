@@ -1,20 +1,42 @@
 package token;
 
+import utils.SecurityUtils;
 import java.io.Serializable;
+import java.security.KeyPair;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
 public class Wallet implements Serializable {
 
-    private final String owner; // nome do detentor
+    private final String name; // Apenas para display (ex: "Carteira do Joao")
+    private final PublicKey publicKey;
+    private final PrivateKey privateKey;
+    
+    // Map<AssetID, Quantidade>
     private final Map<String, Integer> balances = new HashMap<>();
 
-    public Wallet(String owner) {
-        this.owner = owner;
+    public Wallet(String name) throws Exception {
+        this.name = name;
+        // Gera chaves RSA de 2048 bits
+        KeyPair pair = SecurityUtils.generateRSAKeyPair(2048);
+        this.publicKey = pair.getPublic();
+        this.privateKey = pair.getPrivate();
     }
 
-    public String getOwner() {
-        return owner;
+    public String getName() {
+        return name;
+    }
+
+    public PublicKey getPublicKey() {
+        return publicKey;
+    }
+    
+    // Identificador único da carteira (Hash da chave pública)
+    public String getAddress() {
+        return Base64.getEncoder().encodeToString(publicKey.getEncoded());
     }
 
     public int getBalance(String assetID) {
@@ -25,17 +47,21 @@ public class Wallet implements Serializable {
         balances.put(assetID, getBalance(assetID) + amount);
     }
 
-    public void removeTokens(String assetID, int amount) {
+    public void removeTokens(String assetID, int amount) throws Exception {
         int current = getBalance(assetID);
-        if (current < amount) throw new RuntimeException("Saldo insuficiente");
+        if (current < amount) {
+            throw new Exception("Saldo insuficiente na carteira de " + name);
+        }
         balances.put(assetID, current - amount);
+    }
+    
+    // Assina dados com a chave privada desta carteira
+    public byte[] sign(byte[] data) throws Exception {
+        return SecurityUtils.sign(data, this.privateKey);
     }
 
     @Override
     public String toString() {
-        return "Wallet{" +
-                "owner='" + owner + '\'' +
-                ", balances=" + balances +
-                '}';
+        return "Wallet (" + name + ") | Addr: " + getAddress().substring(0, 15) + "...";
     }
 }

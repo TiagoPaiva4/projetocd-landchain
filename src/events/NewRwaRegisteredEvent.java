@@ -32,4 +32,10 @@ public class NewRwaRegisteredEvent implements Event {
     public RWARecord getRecord() {
         return record;
     }
+    
+    // >>>> O MÉTODO QUE FALTAVA <<<<
+    // Este método vai buscar o ID ao registo que está cá dentro
+    public String getAssetID() {
+        return record.getAssetID();
+    }
 }

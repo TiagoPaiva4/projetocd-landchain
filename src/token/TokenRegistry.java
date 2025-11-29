@@ -1,51 +1,80 @@
 package token;
 
-import rwa.RWARecord;
+import core.Block;
+import core.BlockChain;
+import core.Transaction;
+import java.io.Serializable;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
-public class TokenRegistry {
+public class TokenRegistry implements Serializable {
+    
+    // Ledger: Map<EndereçoWallet, Map<AssetID, Quantidade>>
+    private final Map<String, Map<String, Integer>> ledger = new HashMap<>();
 
-    // total de tokens por ativo
-    private final Map<String, Token> tokens = new HashMap<>();
+    public TokenRegistry() {
+    }
 
-    // wallets
-    private final WalletManager walletManager = new WalletManager();
+    // Este método recalcula tudo do zero lendo a blockchain
+    // É a forma mais segura em Blockchain 1.0 para evitar erros de sincronia
+    public void sync(BlockChain bc) {
+        ledger.clear(); // Limpa a cache
+        for (Block b : bc.getBlocks()) {
+            processBlock(b);
+        }
+    }
 
-    // número fixo de tokens por ativo
-    private static final int TOKENS_PER_ASSET = 1000;
+    private void processBlock(Block block) {
+        // Percorre os dados do bloco à procura de Transações
+        List<Object> data = block.getData().getElements();
+        for(Object obj : data) {
+            if (obj instanceof Transaction) {
+                processTransaction((Transaction) obj);
+            }
+        }
+    }
+    
+    private void processTransaction(Transaction tx) {
+        if (!tx.isValid()) return; // Ignora se a assinatura for falsa
 
-    public void mintTokensForRwa(RWARecord record) {
+        String sender = tx.getSender();
+        String receiver = tx.getReceiver();
+        String asset = tx.getAssetID();
+        int amount = tx.getAmount();
 
-        String assetID = record.getAssetID();
-
-        if (tokens.containsKey(assetID)) {
-            System.out.println("RWA " + assetID + " já tem tokens emitidos!");
-            return;
+        // 1. Se NÃO for MINT (SYSTEM), retirar do remetente
+        if (!sender.equals("SYSTEM")) { 
+            int balance = getBalance(sender, asset);
+            if (balance >= amount) {
+                updateBalance(sender, asset, balance - amount);
+            } else {
+                return; // Saldo insuficiente, ignora tx
+            }
         }
 
-        // cria o token principal
-        Token token = new Token(assetID, TOKENS_PER_ASSET);
-        tokens.put(assetID, token);
-
-        // atribui todos os tokens à Oracle (proprietário inicial)
-        Wallet oracleWallet = walletManager.getOrCreateWallet("ORACLE");
-        oracleWallet.addTokens(assetID, TOKENS_PER_ASSET);
-
-        System.out.println("✔ Emitidos " + TOKENS_PER_ASSET +
-                " tokens para o ativo " + assetID);
+        // 2. Adicionar ao destinatário
+        int receiverBalance = getBalance(receiver, asset);
+        updateBalance(receiver, asset, receiverBalance + amount);
     }
-
-    public WalletManager getWalletManager() {
-        return walletManager;
+    
+    public int getBalance(String walletAddr, String assetID) {
+        return ledger.getOrDefault(walletAddr, new HashMap<>())
+                     .getOrDefault(assetID, 0);
     }
-
-    public Token getToken(String assetID) {
-        return tokens.get(assetID);
+    
+    private void updateBalance(String walletAddr, String assetID, int newAmount) {
+        ledger.computeIfAbsent(walletAddr, k -> new HashMap<>()).put(assetID, newAmount);
     }
-
-    public void printTokens() {
-        System.out.println("\n===== TOKENS EMITIDOS =====");
-        tokens.values().forEach(System.out::println);
+    
+    public void printBalances() {
+        System.out.println("=== ESTADO DO TOKEN REGISTRY ===");
+        for (String wallet : ledger.keySet()) {
+            System.out.println("Wallet: " + wallet.substring(0, 15) + "...");
+            Map<String, Integer> assets = ledger.get(wallet);
+            for (String asset : assets.keySet()) {
+                System.out.println("   - " + asset + ": " + assets.get(asset));
+            }
+        }
     }
 }
