@@ -55,6 +55,11 @@ public class Wallet implements Serializable {
         balances.put(assetID, current - amount);
     }
     
+    // ADICIONAR ESTE MÉTODO:
+    public PrivateKey getPrivateKey() {
+        return privateKey;
+    }
+    
     // Assina dados com a chave privada desta carteira
     public byte[] sign(byte[] data) throws Exception {
         return SecurityUtils.sign(data, this.privateKey);

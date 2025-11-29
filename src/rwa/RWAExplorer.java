@@ -2,6 +2,7 @@ package rwa;
 
 import core.Block;
 import core.BlockChain;
+import core.Transaction;
 import events.RentDistributionEvent;
 import network.Message;
 import network.P2PNode;
@@ -17,20 +18,20 @@ public class RWAExplorer {
     private final Oracle oracle;
     private final RWAValidator validator;
     private final Scanner sc;
-    
+
     // Dependências externas (injetadas via setters)
     private P2PNode node;
     private TokenRegistry registry;
-    
+
     // Carteira do utilizador atual (simulação)
-    private Wallet myWallet; 
+    private Wallet myWallet;
 
     public RWAExplorer(BlockChain bc, Oracle oracle, RWAValidator validator) {
         this.blockchain = bc;
         this.oracle = oracle;
         this.validator = validator;
         this.sc = new Scanner(System.in);
-        
+
         // Inicializar uma carteira de teste
         try {
             this.myWallet = new Wallet("User Admin");
@@ -64,28 +65,41 @@ public class RWAExplorer {
             System.out.println("5 - Registar Renda");
             System.out.println("6 - Listar Rendas");
             System.out.println("7 - Ver Meus Saldos"); // <--- NOVA OPÇÃO
+            System.out.println("8 - Transferir Tokens");
             System.out.println("0 - Sair");
             System.out.print("Opção: ");
 
             try {
                 String input = sc.nextLine();
                 // Proteção contra enter vazio
-                if(input.trim().isEmpty()) continue;
-                
+                if (input.trim().isEmpty()) {
+                    continue;
+                }
+
                 int op = Integer.parseInt(input);
                 switch (op) {
-                    case 1 -> registarRWA();
-                    case 2 -> listarRWAs();
-                    case 3 -> validarRWA();
-                    case 4 -> mostrarBlockchain();
-                    case 5 -> registarRenda();
-                    case 6 -> listarRendas();
-                    case 7 -> verMeusSaldos();
+                    case 1 ->
+                        registarRWA();
+                    case 2 ->
+                        listarRWAs();
+                    case 3 ->
+                        validarRWA();
+                    case 4 ->
+                        mostrarBlockchain();
+                    case 5 ->
+                        registarRenda();
+                    case 6 ->
+                        listarRendas();
+                    case 7 ->
+                        verMeusSaldos();
+                    case 8 ->
+                        transferirTokens();
                     case 0 -> {
                         System.out.println("A terminar...");
                         return;
                     }
-                    default -> System.out.println("Opção inválida!");
+                    default ->
+                        System.out.println("Opção inválida!");
                 }
             } catch (NumberFormatException e) {
                 System.out.println("Por favor, insira um número válido.");
@@ -132,8 +146,10 @@ public class RWAExplorer {
         System.out.println("\n===== LISTA DE RWA's =====\n");
         for (Block b : blockchain.getBlocks()) {
             List<Object> dados = b.getData().getElements();
-            if (dados.isEmpty()) continue;
-            
+            if (dados.isEmpty()) {
+                continue;
+            }
+
             // Procura dentro do bloco se existe um RWARecord
             for (Object obj : dados) {
                 if (obj instanceof RWARecord) {
@@ -160,7 +176,7 @@ public class RWAExplorer {
             System.out.print("ID do RWA: ");
             String id = sc.nextLine();
             RWARecord alvo = null;
-            
+
             // Procura o registo na blockchain
             for (Block b : blockchain.getBlocks()) {
                 List<Object> dados = b.getData().getElements();
@@ -170,14 +186,16 @@ public class RWAExplorer {
                         break;
                     }
                 }
-                if (alvo != null) break;
+                if (alvo != null) {
+                    break;
+                }
             }
-            
+
             if (alvo == null) {
                 System.out.println("❌ RWA não encontrado!");
                 return;
             }
-            
+
             System.out.print("Caminho do ficheiro REAL: ");
             String path = sc.nextLine();
             boolean ok = validator.validar(alvo, path);
@@ -209,10 +227,10 @@ public class RWAExplorer {
             String id = sc.nextLine();
             System.out.print("Valor da renda (€): ");
             double valor = Double.parseDouble(sc.nextLine());
-            
+
             oracle.registarRenda(id, valor);
             System.out.println("✔ Renda registada com sucesso!");
-            
+
             propagarUltimoBloco();
         } catch (Exception e) {
             System.out.println("Erro ao registar renda: " + e.getMessage());
@@ -226,8 +244,10 @@ public class RWAExplorer {
         System.out.println("\n===== RENDAS NA BLOCKCHAIN =====\n");
         for (Block b : blockchain.getBlocks()) {
             List<Object> dados = b.getData().getElements();
-            if (dados.isEmpty()) continue;
-            
+            if (dados.isEmpty()) {
+                continue;
+            }
+
             for (Object obj : dados) {
                 if (obj instanceof RentDistributionEvent) {
                     printRenda((RentDistributionEvent) obj);
@@ -252,24 +272,111 @@ public class RWAExplorer {
             System.out.println("Erro: TokenRegistry não configurado no Main.");
             return;
         }
-        
+
         System.out.println("\n===== MEUS SALDOS =====");
         System.out.println("Wallet Addr: " + myWallet.getAddress());
-        
+
         // 1. Forçar sincronização do registry com a blockchain atual
         registry.sync(blockchain);
-        
+
         // 2. Imprimir todos os saldos (Para debug, imprime tudo, depois podes filtrar)
         registry.printBalances();
-        
+
         System.out.println("=======================");
+    }
+
+    // ================================
+    // 8 — TRANSFERIR TOKENS
+    // ================================
+    private void transferirTokens() {
+        try {
+            if (myWallet == null) {
+                System.out.println("ERRO: Nenhuma carteira configurada.");
+                return;
+            }
+
+            System.out.println("\n--- TRANSFERENCIA DE TOKENS ---");
+
+            // 1. Qual o ativo?
+            System.out.print("ID do Ativo (ex: 5): ");
+            String assetId = sc.nextLine();
+
+            // 2. Verificar Saldo antes de continuar (UX)
+            if (registry != null) {
+                registry.sync(blockchain);
+                int saldo = registry.getBalance(myWallet.getAddress(), assetId);
+                System.out.println("Teu Saldo Atual: " + saldo);
+                if (saldo <= 0) {
+                    System.out.println("❌ Não tens tokens deste ativo para enviar.");
+                    return;
+                }
+            }
+
+            // 3. Para quem?
+            System.out.println("Destinatário (Cola a Chave Pública/Address do outro nó): ");
+            String receiverAddress = sc.nextLine();
+
+            // Validação básica
+            if (receiverAddress.equals(myWallet.getAddress())) {
+                System.out.println("❌ Não podes enviar para ti próprio.");
+                return;
+            }
+
+            // 4. Quanto?
+            System.out.print("Quantidade a enviar: ");
+            int amount = Integer.parseInt(sc.nextLine());
+
+            if (amount <= 0) {
+                System.out.println("❌ A quantidade deve ser positiva.");
+                return;
+            }
+
+            // ==========================================
+            // CRIAÇÃO DA TRANSAÇÃO
+            // ==========================================
+            Transaction tx = new Transaction(
+                    Transaction.Type.TRANSFER_TOKEN,
+                    myWallet.getAddress(), // Sender (Eu)
+                    receiverAddress, // Receiver (O outro)
+                    assetId, // O Ativo
+                    amount, // Quantidade
+                    "Transferencia P2P"
+            );
+
+            // 5. Assinar Transação (Segurança Crítica!)
+            tx.sign(myWallet.getPrivateKey());
+
+            // 6. Validar a transação localmente antes de enviar
+            if (!tx.isValid()) {
+                System.out.println("❌ Erro critico: Falha na assinatura digital.");
+                return;
+            }
+
+            // 7. Minerar Bloco (Blockchain 1.0 guarda tx em blocos)
+            // Criamos uma lista de dados para o bloco
+            java.util.List<Object> blockData = java.util.List.of(tx);
+
+            blockchain.add(blockData);
+
+            System.out.println("✔ Transação realizada com sucesso!");
+            System.out.println("Enviado: " + amount + " tokens -> " + receiverAddress.substring(0, 10) + "...");
+
+            // 8. Propagar para a rede
+            propagarUltimoBloco();
+
+        } catch (Exception e) {
+            System.out.println("Erro na transferencia: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     // ================================
     // MÉTODO AUXILIAR DE REDE
     // ================================
     private void propagarUltimoBloco() {
-        if (node == null) return;
+        if (node == null) {
+            return;
+        }
         try {
             Block lastBlock = blockchain.getLastBlock();
             System.out.println(">> A propagar bloco " + lastBlock.getID() + " para a rede...");

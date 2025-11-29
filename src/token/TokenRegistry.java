@@ -68,13 +68,22 @@ public class TokenRegistry implements Serializable {
     }
     
     public void printBalances() {
-        System.out.println("=== ESTADO DO TOKEN REGISTRY ===");
+        System.out.println("=== ESTADO GERAL DO TOKEN REGISTRY ===");
+        if (ledger.isEmpty()) {
+            System.out.println("(Vazio)");
+        }
+        
         for (String wallet : ledger.keySet()) {
-            System.out.println("Wallet: " + wallet.substring(0, 15) + "...");
+            
+            String idVisual = "..." + wallet.substring(wallet.length() - 15);
+            
+            System.out.println("Carteira [" + idVisual + "]");
+            
             Map<String, Integer> assets = ledger.get(wallet);
             for (String asset : assets.keySet()) {
-                System.out.println("   - " + asset + ": " + assets.get(asset));
+                System.out.println("   -> Ativo: " + asset + " | Qtd: " + assets.get(asset));
             }
+            System.out.println("-----------------------------------");
         }
     }
 }
