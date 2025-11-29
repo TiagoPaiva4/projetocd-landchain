@@ -1,19 +1,13 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package app;
 
-/**
- *
- * @author Tiago Paiva
- */
 import core.Block;
 import core.BlockChain;
-import java.util.List;
+import events.EventManager;
 import rwa.Oracle;
 import rwa.RWARecord;
 import rwa.RWAValidator;
+
+import java.util.List;
 
 public class RWADemo {
 
@@ -26,51 +20,55 @@ public class RWADemo {
             System.out.println("=== Criar Genesis Block ===");
 
             Block genesis = new Block(
-                    0,                  // ID
-                    new byte[32],       // previousHash = 32 zeros
-                    3,                  // difficulty (podes ajustar)
-                    List.of("GENESIS")  // data do genesis
+                    0,
+                    new byte[32],
+                    3,
+                    List.of("GENESIS")
             );
 
-            genesis.mine();  // minerar o bloco inicial
+            genesis.mine();
 
             //-------------------------------------------------------
-            // 2) Criar Blockchain com genesis
+            // 2) Criar Blockchain
             //-------------------------------------------------------
             BlockChain blockchain = new BlockChain(genesis);
 
             //-------------------------------------------------------
-            // 3) Criar Oracle
+            // 3) Criar EventManager
             //-------------------------------------------------------
-            Oracle oracle = new Oracle(blockchain);
+            EventManager events = new EventManager();
 
             //-------------------------------------------------------
-            // 4) Caminho para o ficheiro REAL
+            // 4) Criar Oracle (agora requer EventManager!)
             //-------------------------------------------------------
-            String filePath = "C:\\Users\\Tiago Paiva\\Downloads\\SO.pdf"; // <-- ALTERA AQUI
+            Oracle oracle = new Oracle(blockchain, events);
 
             //-------------------------------------------------------
-            // 5) Registar RWA
+            // 5) Caminho do documento real
+            //-------------------------------------------------------
+            String filePath = "C:\\Users\\Tiago Paiva\\Downloads\\SO.pdf";
+
+            //-------------------------------------------------------
+            // 6) Registar RWA
             //-------------------------------------------------------
             System.out.println("\n=== Registar RWA ===");
 
             oracle.registarRWA("RWA001", "IMÓVEL", filePath);
 
             //-------------------------------------------------------
-            // 6) Obter último bloco após registo
+            // 7) Capturar último bloco
             //-------------------------------------------------------
             Block ultimo = blockchain.getLastBlock();
 
             List<Object> dados = ultimo.getData().getElements();
 
-            // O RWA está em dados[0]
             RWARecord record = (RWARecord) dados.get(0);
 
             System.out.println("\nRWA registado:");
             System.out.println(record);
 
             //-------------------------------------------------------
-            // 7) Validar RWA
+            // 8) Validar o RWA
             //-------------------------------------------------------
             System.out.println("\n=== Validar RWA ===");
 

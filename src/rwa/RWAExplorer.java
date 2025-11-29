@@ -15,13 +15,16 @@ import java.util.Scanner;
  */
 public class RWAExplorer {
 
-    private BlockChain blockchain;
-    private Oracle oracle;
-    private Scanner sc;
+    private final BlockChain blockchain;
+    private final Oracle oracle;
+    private final RWAValidator validator;
+    private final Scanner sc;
 
-    public RWAExplorer(BlockChain bc) throws Exception {
+    // Construtor correto — recebe tudo do Main
+    public RWAExplorer(BlockChain bc, Oracle oracle, RWAValidator validator) {
         this.blockchain = bc;
-        this.oracle = new Oracle(bc);
+        this.oracle = oracle;
+        this.validator = validator;
         this.sc = new Scanner(System.in);
     }
 
@@ -40,7 +43,7 @@ public class RWAExplorer {
             System.out.print("Opção: ");
 
             int op = sc.nextInt();
-            sc.nextLine(); // limpar enter
+            sc.nextLine();
 
             switch (op) {
                 case 1 -> registarRWA();
@@ -56,18 +59,18 @@ public class RWAExplorer {
         }
     }
 
-    // ================================
-    //     1 — REGISTAR RWA
-    // ================================
+    // =================================================
+    // 1 — REGISTAR RWA
+    // =================================================
     private void registarRWA() {
         try {
             System.out.print("ID do ativo: ");
             String id = sc.nextLine();
 
-            System.out.print("Tipo do ativo (ex: IMÓVEL, CERTIFICADO): ");
+            System.out.print("Tipo do ativo (ex: IMOVEL, OURO, TÍTULO): ");
             String tipo = sc.nextLine();
 
-            System.out.print("Caminho do ficheiro: ");
+            System.out.print("Caminho do ficheiro (PDF, IMG, etc): ");
             String path = sc.nextLine();
 
             oracle.registarRWA(id, tipo, path);
@@ -79,10 +82,11 @@ public class RWAExplorer {
         }
     }
 
-    // ================================
-    //     2 — LISTAR RWAs
-    // ================================
+    // =================================================
+    // 2 — LISTAR RWAs
+    // =================================================
     private void listarRWAs() {
+
         System.out.println("\n===== LISTA DE RWA's NA BLOCKCHAIN =====\n");
 
         for (Block b : blockchain.getBlocks()) {
@@ -92,11 +96,11 @@ public class RWAExplorer {
             }
 
             List<Object> dados = b.getData().getElements();
-
             if (dados.isEmpty()) continue;
 
             Object obj = dados.get(0);
 
+            // Verifica se o bloco contém um RWARecord
             if (obj instanceof RWARecord record) {
                 printRecord(record);
             }
@@ -113,18 +117,19 @@ public class RWAExplorer {
         System.out.println("---------------------------------");
     }
 
-    // ================================
-    //     3 — VALIDAR RWA
-    // ================================
+    // =================================================
+    // 3 — VALIDAR RWA
+    // =================================================
     private void validarRWA() {
         try {
-            System.out.print("ID do RWA a validar: ");
+            System.out.print("ID do RWA: ");
             String id = sc.nextLine();
 
             RWARecord alvo = null;
 
             for (Block b : blockchain.getBlocks()) {
                 if (b.getID() == 0) continue;
+
                 List<Object> dados = b.getData().getElements();
                 if (dados.isEmpty()) continue;
 
@@ -132,7 +137,6 @@ public class RWAExplorer {
 
                 if (obj instanceof RWARecord record &&
                         record.getAssetID().equals(id)) {
-
                     alvo = record;
                     break;
                 }
@@ -143,22 +147,21 @@ public class RWAExplorer {
                 return;
             }
 
-            System.out.print("Caminho do ficheiro REAL para validar: ");
+            System.out.print("Caminho do ficheiro REAL: ");
             String path = sc.nextLine();
 
-            boolean valido = RWAValidator.validar(alvo, path);
+            boolean ok = validator.validar(alvo, path);
 
-            System.out.println("\nResultado: " +
-                    (valido ? "✔ VÁLIDO" : "❌ INVÁLIDO"));
+            System.out.println("\nResultado: " + (ok ? "✔ VÁLIDO" : "❌ INVÁLIDO"));
 
         } catch (Exception e) {
-            System.out.println("Erro ao validar RWA: " + e.getMessage());
+            System.out.println("Erro: " + e.getMessage());
         }
     }
 
-    // ================================
-    //     4 — MOSTRAR BLOCKCHAIN
-    // ================================
+    // =================================================
+    // 4 — MOSTRAR BLOCKCHAIN
+    // =================================================
     private void mostrarBlockchain() {
         System.out.println("\n===== BLOCKCHAIN =====\n");
 
@@ -169,4 +172,3 @@ public class RWAExplorer {
         }
     }
 }
-

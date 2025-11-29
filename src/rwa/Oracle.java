@@ -4,10 +4,6 @@
  */
 package rwa;
 
-/**
- *
- * @author Tiago Paiva
- */
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.KeyPair;
@@ -15,16 +11,29 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 
 import core.BlockChain;
+import events.NewRwaRegisteredEvent;
 import utils.SecurityUtils;
 
+import core.BlockChain;
+import events.EventManager;
+import events.NewRwaRegisteredEvent;
+import utils.SecurityUtils;
+
+/**
+ *
+ * @author Tiago Paiva
+ */
 public class Oracle {
 
     private PublicKey publicKey;
     private PrivateKey privateKey;
-    private BlockChain blockchain;
+    private final BlockChain blockchain;
+    private final EventManager events;
 
-    public Oracle(BlockChain blockchain) throws Exception {
+    // Novo construtor correto
+    public Oracle(BlockChain blockchain, EventManager events) throws Exception {
         this.blockchain = blockchain;
+        this.events = events;
 
         // gerar par de chaves
         KeyPair keys = SecurityUtils.generateRSAKeyPair(2048);
@@ -32,19 +41,19 @@ public class Oracle {
         this.privateKey = keys.getPrivate();
     }
 
-    // REGISTA UM RWA
+    // Registrar RWA no sistema
     public void registarRWA(String assetID, String assetType, String filePath) throws Exception {
 
-        // 1) ler documento real
+        // 1) Ler ficheiro real
         byte[] documento = Files.readAllBytes(Paths.get(filePath));
 
-        // 2) hash do documento
+        // 2) Hash do ficheiro
         byte[] hash = SecurityUtils.calculateHash(documento, "SHA3-256");
 
-        // 3) assinatura da oracle
+        // 3) Assinatura da Oracle
         byte[] assinatura = SecurityUtils.sign(hash, privateKey);
 
-        // 4) criar o objeto RWARecord
+        // 4) Criar registo RWA
         RWARecord record = new RWARecord(
                 assetID,
                 assetType,
@@ -53,7 +62,10 @@ public class Oracle {
                 publicKey.getEncoded()
         );
 
-        // 5) inserir na blockchain
+        // 5) Inserir bloco na blockchain
         blockchain.add(new Object[]{record});
+
+        // 6) Disparar evento (TokenRegistryListener vai criar tokens)
+        events.publish(new NewRwaRegisteredEvent(record));
     }
 }
