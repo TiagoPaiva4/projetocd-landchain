@@ -3,6 +3,8 @@ package rwa;
 import core.Block;
 import core.BlockChain;
 import events.RentDistributionEvent;
+import network.Message;  // <--- IMPORTANTE
+import network.P2PNode;  // <--- IMPORTANTE
 
 import java.util.List;
 import java.util.Scanner;
@@ -13,12 +15,23 @@ public class RWAExplorer {
     private final Oracle oracle;
     private final RWAValidator validator;
     private final Scanner sc;
+    
+    // Variável para comunicar com a rede
+    private P2PNode node;
 
     public RWAExplorer(BlockChain bc, Oracle oracle, RWAValidator validator) {
         this.blockchain = bc;
         this.oracle = oracle;
         this.validator = validator;
         this.sc = new Scanner(System.in);
+    }
+
+    /**
+     * Define o nó de rede para permitir broadcast de blocos
+     * @param node O nó P2P iniciado no Main
+     */
+    public void setNode(P2PNode node) {
+        this.node = node;
     }
 
     // ================================
@@ -37,21 +50,24 @@ public class RWAExplorer {
             System.out.println("0 - Sair");
             System.out.print("Opção: ");
 
-            int op = sc.nextInt();
-            sc.nextLine();
+            try {
+                int op = Integer.parseInt(sc.nextLine());
 
-            switch (op) {
-                case 1 -> registarRWA();
-                case 2 -> listarRWAs();
-                case 3 -> validarRWA();
-                case 4 -> mostrarBlockchain();
-                case 5 -> registarRenda();
-                case 6 -> listarRendas();
-                case 0 -> {
-                    System.out.println("A terminar...");
-                    return;
+                switch (op) {
+                    case 1 -> registarRWA();
+                    case 2 -> listarRWAs();
+                    case 3 -> validarRWA();
+                    case 4 -> mostrarBlockchain();
+                    case 5 -> registarRenda();
+                    case 6 -> listarRendas();
+                    case 0 -> {
+                        System.out.println("A terminar...");
+                        return;
+                    }
+                    default -> System.out.println("Opção inválida!");
                 }
-                default -> System.out.println("Opção inválida!");
+            } catch (NumberFormatException e) {
+                System.out.println("Por favor, insira um número válido.");
             }
         }
     }
@@ -70,12 +86,17 @@ public class RWAExplorer {
             System.out.print("Caminho do ficheiro: ");
             String path = sc.nextLine();
 
+            // 1. Registar localmente (Oracle cria o bloco e adiciona à chain)
             oracle.registarRWA(id, tipo, path);
 
             System.out.println("✔ RWA registado com sucesso!");
 
+            // 2. AVISAR A REDE (Broadcast)
+            propagarUltimoBloco();
+
         } catch (Exception e) {
             System.out.println("Erro ao registar RWA: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -104,7 +125,7 @@ public class RWAExplorer {
         System.out.println("Asset ID: " + r.getAssetID());
         System.out.println("Tipo: " + r.getAssetType());
         System.out.println("Timestamp: " + r.getTimestamp());
-        System.out.println("Hash: " +
+        System.out.println("Hash Doc: " +
                 java.util.Base64.getEncoder().encodeToString(r.getHashDocumento()));
         System.out.println("---------------------------------");
     }
@@ -157,7 +178,8 @@ public class RWAExplorer {
 
         for (Block b : blockchain.getBlocks()) {
             System.out.println("------ BLOCO " + b.getID() + " ------");
-            System.out.println(b);
+            System.out.println(b.toStringHeader()); // Usar apenas Header para não poluir
+            System.out.println("Dados: " + b.getData().getElements());
             System.out.println();
         }
     }
@@ -173,9 +195,13 @@ public class RWAExplorer {
             System.out.print("Valor da renda (€): ");
             double valor = Double.parseDouble(sc.nextLine());
 
+            // 1. Registar localmente
             oracle.registarRenda(id, valor);
 
             System.out.println("✔ Renda registada com sucesso!");
+
+            // 2. AVISAR A REDE (Broadcast)
+            propagarUltimoBloco();
 
         } catch (Exception e) {
             System.out.println("Erro ao registar renda: " + e.getMessage());
@@ -208,5 +234,23 @@ public class RWAExplorer {
         System.out.println("Renda: " + e.getAmount() + " €");
         System.out.println("Data: " + new java.util.Date(e.getTimestamp()));
         System.out.println("---------------------------------");
+    }
+
+    // ================================
+    // MÉTODO AUXILIAR DE REDE
+    // ================================
+    private void propagarUltimoBloco() {
+        // Se a rede não estiver ligada (ex: modo offline), ignora
+        if (node == null) return;
+
+        try {
+            Block lastBlock = blockchain.getLastBlock();
+            System.out.println(">> A propagar bloco " + lastBlock.getID() + " para a rede...");
+            
+            node.broadcast(new Message(Message.Type.NEW_BLOCK, lastBlock));
+            
+        } catch (Exception e) {
+            System.out.println("Aviso: Não foi possível propagar o bloco. " + e.getMessage());
+        }
     }
 }
