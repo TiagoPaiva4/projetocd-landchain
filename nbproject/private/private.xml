@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project-private xmlns="http://www.netbeans.org/ns/project-private/1">
+    <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
+    <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
+        <group>
+            <file>file:/C:/Users/Tiago%20Paiva/projetocd-landchain/src/core/Block.java</file>
+            <file>file:/C:/Users/Tiago%20Paiva/projetocd-landchain/src/events/RentDistributionEvent.java</file>
+            <file>file:/C:/Users/Tiago%20Paiva/projetocd-landchain/src/app/Main.java</file>
+            <file>file:/C:/Users/Tiago%20Paiva/projetocd-landchain/src/core/BlockChain.java</file>
+            <file>file:/C:/Users/Tiago%20Paiva/projetocd-landchain/src/events/RentListener.java</file>
+            <file>file:/C:/Users/Tiago%20Paiva/projetocd-landchain/src/rwa/Oracle.java</file>
+            <file>file:/C:/Users/Tiago%20Paiva/projetocd-landchain/src/events/EventManager.java</file>
+        </group>
+    </open-files>
+</project-private>

@@ -17,6 +17,7 @@ import utils.SecurityUtils;
 import core.BlockChain;
 import events.EventManager;
 import events.NewRwaRegisteredEvent;
+import events.RentDistributionEvent;
 import utils.SecurityUtils;
 
 /**
@@ -68,4 +69,17 @@ public class Oracle {
         // 6) Disparar evento (TokenRegistryListener vai criar tokens)
         events.publish(new NewRwaRegisteredEvent(record));
     }
+
+    public void registarRenda(String assetID, double amount) throws Exception {
+    RentDistributionEvent e = new RentDistributionEvent(assetID, amount);
+    try {
+        this.events.publish(e);
+    } catch (Exception ex) {
+        System.err.println("Erro ao publicar RentDistributionEvent: " + ex.getMessage());
+        ex.printStackTrace();
+        throw ex;
+    }
+}
+
+
 }

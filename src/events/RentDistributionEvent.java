@@ -1,23 +1,30 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package events;
 
-/**
- *
- * @author Tiago Paiva
- */
-public class RentDistributionEvent implements Event {
+import java.io.Serializable;
+import java.util.Date;
 
-    private final String propertyId;
+public class RentDistributionEvent implements Event, Serializable {
+
+    private final String assetID;
     private final double amount;
     private final long timestamp;
 
-    public RentDistributionEvent(String propertyId, double amount) {
-        this.propertyId = propertyId;
+    public RentDistributionEvent(String assetID, double amount) {
+        this.assetID = assetID;
         this.amount = amount;
         this.timestamp = System.currentTimeMillis();
+    }
+
+    public String getAssetID() {
+        return assetID;
+    }
+
+    public double getAmount() {
+        return amount;
+    }
+
+    public long getTimestamp() {
+        return timestamp;
     }
 
     @Override
@@ -25,16 +32,13 @@ public class RentDistributionEvent implements Event {
         return "RENT_DISTRIBUTION";
     }
 
-    @Override
-    public long getTimestamp() {
+    public long getTimestampMillis() {
         return timestamp;
     }
 
-    public String getPropertyId() {
-        return propertyId;
-    }
-
-    public double getAmount() {
-        return amount;
+    @Override
+    public String toString() {
+        return "RentDistributionEvent{ assetID='" + assetID + "', amount=" + amount +
+               ", timestamp=" + new Date(timestamp) + " }";
     }
 }
