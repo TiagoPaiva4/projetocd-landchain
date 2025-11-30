@@ -86,4 +86,28 @@ public class TokenRegistry implements Serializable {
             System.out.println("-----------------------------------");
         }
     }
+    
+
+    public void printWalletBalance(String walletAddress) {
+        System.out.println("=== SALDO DA MINHA CARTEIRA ===");
+        
+        if (!ledger.containsKey(walletAddress)) {
+            System.out.println(" (Sem registos nesta blockchain) ");
+            return;
+        }
+
+        Map<String, Integer> assets = ledger.get(walletAddress);
+        
+        if (assets.isEmpty()) {
+            System.out.println(" (Carteira Vazia) ");
+            return;
+        }
+
+        for (String assetID : assets.keySet()) {
+            int qtd = assets.get(assetID);
+            System.out.println(" > Ativo: " + assetID + " | Quantidade: " + qtd);
+        }
+        System.out.println("===============================");
+    }
+
 }

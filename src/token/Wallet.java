@@ -1,7 +1,9 @@
 package token;
 
 import utils.SecurityUtils;
-import java.io.Serializable;
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
@@ -11,7 +13,9 @@ import java.util.Map;
 
 public class Wallet implements Serializable {
 
-    private final String name; // Apenas para display (ex: "Carteira do Joao")
+    private static final long serialVersionUID = 1L; // Importante para compatibilidade
+
+    private final String name;
     private final PublicKey publicKey;
     private final PrivateKey privateKey;
     
@@ -20,21 +24,62 @@ public class Wallet implements Serializable {
 
     public Wallet(String name) throws Exception {
         this.name = name;
-        // Gera chaves RSA de 2048 bits
         KeyPair pair = SecurityUtils.generateRSAKeyPair(2048);
         this.publicKey = pair.getPublic();
         this.privateKey = pair.getPrivate();
     }
 
-    public String getName() {
-        return name;
+    // ==========================================
+    //  NOVOS MÉTODOS: PERSISTÊNCIA SEGURA
+    // ==========================================
+
+    /**
+     * Guarda a carteira num ficheiro encriptado com password
+     */
+    public void save(String filename, String password) throws Exception {
+        // 1. Converter o objeto Wallet em Bytes (Serialização)
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(bos);
+        oos.writeObject(this);
+        byte[] walletBytes = bos.toByteArray();
+
+        // 2. Encriptar os bytes com a password
+        byte[] encryptedData = SecurityUtils.encrypt(walletBytes, password);
+
+        // 3. Escrever no disco
+        if(!filename.endsWith(".wallet")) filename += ".wallet";
+        Files.write(Paths.get(filename), encryptedData);
+        
+        System.out.println("Carteira guardada em: " + filename);
     }
 
-    public PublicKey getPublicKey() {
-        return publicKey;
+    /**
+     * Carrega uma carteira do disco desencriptando com a password
+     */
+    public static Wallet load(String filename, String password) throws Exception {
+        if(!filename.endsWith(".wallet")) filename += ".wallet";
+
+        // 1. Ler os bytes encriptados do disco
+        byte[] encryptedData = Files.readAllBytes(Paths.get(filename));
+
+        // 2. Desencriptar usando a password
+        byte[] walletBytes = SecurityUtils.decrypt(encryptedData, password);
+
+        // 3. Converter bytes de volta em Objeto (Deserialização)
+        ByteArrayInputStream bis = new ByteArrayInputStream(walletBytes);
+        ObjectInputStream ois = new ObjectInputStream(bis);
+        
+        return (Wallet) ois.readObject();
     }
-    
-    // Identificador único da carteira (Hash da chave pública)
+
+    // ==========================================
+    //  MÉTODOS EXISTENTES
+    // ==========================================
+
+    public String getName() { return name; }
+    public PublicKey getPublicKey() { return publicKey; }
+    public PrivateKey getPrivateKey() { return privateKey; } // Necessário para assinar
+
     public String getAddress() {
         return Base64.getEncoder().encodeToString(publicKey.getEncoded());
     }
@@ -55,12 +100,6 @@ public class Wallet implements Serializable {
         balances.put(assetID, current - amount);
     }
     
-    // ADICIONAR ESTE MÉTODO:
-    public PrivateKey getPrivateKey() {
-        return privateKey;
-    }
-    
-    // Assina dados com a chave privada desta carteira
     public byte[] sign(byte[] data) throws Exception {
         return SecurityUtils.sign(data, this.privateKey);
     }
