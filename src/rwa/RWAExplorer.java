@@ -127,6 +127,7 @@ public class RWAExplorer {
             System.out.println("9  - [MERCADO] Criar Ordem de Venda");
             System.out.println("10 - [MERCADO] Comprar Tokens");
             System.out.println("11 - [MERCADO] Confirmar Venda (Vendedor)");
+            System.out.println("12 - Ver Extrato de Movimentos"); // Novo
             System.out.println("0 - Sair");
             System.out.print("Opção: ");
 
@@ -147,6 +148,7 @@ public class RWAExplorer {
                     case 9 -> criarOrdemVenda();
                     case 10 -> comprarTokens();
                     case 11 -> confirmarVenda();
+                    case 12 -> verExtrato();
                     case 0 -> {
                         System.out.println("A terminar...");
                         return;
@@ -494,6 +496,78 @@ public class RWAExplorer {
         }
     }
 
+    // ================================
+    // 12 - EXTRATO DE MOVIMENTOS
+    // ================================
+    private void verExtrato() {
+        if (myWallet == null) return;
+        
+        System.out.println("\n=== EXTRATO DE MOVIMENTOS: " + myWallet.getName() + " ===");
+        String myAddr = myWallet.getAddress();
+        boolean encontrou = false;
+
+        // Percorrer a Blockchain do início ao fim
+        for (Block b : blockchain.getBlocks()) {
+            for (Object obj : b.getData().getElements()) {
+                
+                if (obj instanceof Transaction) {
+                    Transaction tx = (Transaction) obj;
+                    
+                    // Verificar se sou o Remetente OU o Destinatário
+                    boolean souRemetente = tx.getSender().equals(myAddr);
+                    boolean souDestinatario = tx.getReceiver().equals(myAddr);
+
+                    if (souRemetente || souDestinatario) {
+                        encontrou = true;
+                        String tipo = "";
+                        String detalhes = "";
+                        
+                        // Formatar a mensagem dependendo do tipo
+                        if (tx.getType() == Transaction.Type.MINT_TOKEN) {
+                            tipo = "[+] MINT";
+                            detalhes = "Recebidos 1000 tokens (Criação)";
+                        } 
+                        else if (tx.getType() == Transaction.Type.TRANSFER_TOKEN) {
+                            if (souRemetente) {
+                                tipo = "[-] ENVIO";
+                                detalhes = "Enviaste " + tx.getAmount() + " tokens (" + tx.getAssetID() + ")";
+                            } else {
+                                tipo = "[+] RECEBIDO";
+                                detalhes = "Recebeste " + tx.getAmount() + " tokens (" + tx.getAssetID() + ")";
+                            }
+                        }
+                        else if (tx.getType() == Transaction.Type.CREATE_SALE) {
+                            tipo = "[-] ESCROW";
+                            detalhes = "Colocaste à venda " + tx.getAmount() + " tokens por " + tx.getPrice() + "€";
+                        }
+                        else if (tx.getType() == Transaction.Type.BUY_SALE) {
+                            tipo = "[!] RESERVA";
+                            detalhes = "Reservaste compra de " + tx.getAssetID();
+                        }
+                        else if (tx.getType() == Transaction.Type.CONFIRM_SALE) {
+                            if (souRemetente) { // Vendedor
+                                tipo = "[OK] VENDA";
+                                detalhes = "Confirmaste a venda. Tokens libertados.";
+                            } else { // Comprador
+                                tipo = "[+] COMPRA";
+                                detalhes = "Compra finalizada! Recebeste " + tx.getAmount() + " tokens.";
+                            }
+                        }
+
+                        // Imprimir linha bonita
+                        System.out.printf("%s | Data: %s | %s\n", 
+                                tipo, new java.util.Date(tx.getTimestamp()).toString(), detalhes);
+                    }
+                }
+            }
+        }
+        
+        if (!encontrou) {
+            System.out.println("(Nenhum movimento encontrado)");
+        }
+        System.out.println("==============================================");
+    }
+    
     // ================================
     // AUXILIAR DE REDE
     // ================================
