@@ -1,27 +1,51 @@
 package events;
 
 import core.BlockChain;
+import token.TokenRegistry;
+import java.util.Map;
 
 public class RentListener implements EventListener {
 
-    private final BlockChain blockchain;
+    private final TokenRegistry registry;
 
-    public RentListener(BlockChain blockchain) {
-        this.blockchain = blockchain;
+    // Precisamos do registry para saber quem são os donos
+    public RentListener(TokenRegistry registry) {
+        this.registry = registry;
     }
 
     @Override
     public void onEvent(Event event) {
-        if (event instanceof RentDistributionEvent e) {
-            try {
-                // adiciona o evento como dado do bloco
-                blockchain.add(new Object[]{e});
-                System.out.println("✔ Bloco de renda adicionado: " + e.getAmount() + " €");
-            } catch (Exception ex) {
-                // regista o erro sem lançar: evita quebra do flow de eventos
-                System.err.println("Erro ao adicionar renda à blockchain: " + ex.getMessage());
-                ex.printStackTrace();
+        if (event instanceof RentDistributionEvent) {
+            RentDistributionEvent e = (RentDistributionEvent) event;
+            System.out.println("\n$$$ DISTRIBUIÇÃO DE RENDA INICIADA $$$");
+            System.out.println("Ativo: " + e.getAssetID());
+            System.out.println("Valor Total: " + e.getAmount() + " €");
+
+            // 1. Obter quem tem os tokens
+            Map<String, Integer> holders = registry.getAssetHolders(e.getAssetID());
+            
+            if (holders.isEmpty()) {
+                System.out.println(">> Ninguém detém tokens deste ativo (ou supply é 0).");
+                return;
             }
+
+            // 2. Calcular total de tokens em circulação para este ativo
+            int totalTokens = 0;
+            for (int qtd : holders.values()) totalTokens += qtd;
+
+            // 3. Calcular e imprimir quanto cada um ganha
+            System.out.println("--- Pagamentos aos Acionistas ---");
+            for (String wallet : holders.keySet()) {
+                int userTokens = holders.get(wallet);
+                
+                // Regra de 3 simples: (MeusTokens / TotalTokens) * ValorRenda
+                double share = ((double) userTokens / totalTokens) * e.getAmount();
+                
+                String walletShort = wallet.substring(0, 15) + "...";
+                System.out.printf(" > Wallet: %s | Tem: %d (%.1f%%) | Recebe: %.2f €\n", 
+                        walletShort, userTokens, ((double)userTokens/totalTokens)*100, share);
+            }
+            System.out.println("$$$ DISTRIBUIÇÃO CONCLUÍDA $$$\n");
         }
     }
 }

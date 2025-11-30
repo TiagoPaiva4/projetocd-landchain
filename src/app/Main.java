@@ -81,8 +81,8 @@ public class Main {
             TokenRegistry registry = new TokenRegistry();
             events.subscribe(new TokenRegistryListener(registry));
 
-            // 6 — Rent Listener
-            events.subscribe(new RentListener(bc));
+            // 6 — Rent Listener (AGORA RECEBE O REGISTRY TAMBÉM)
+            events.subscribe(new RentListener(registry));
 
             // 7 — Oracle (Usa o EventManager e a Blockchain partilhada)
             Oracle oracle = new Oracle(bc, events);

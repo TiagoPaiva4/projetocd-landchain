@@ -57,12 +57,16 @@ public class TokenRegistry implements Serializable {
                 updateBalance("ESCROW_POOL", asset, balPool + amount);
             }
             return; // Fim desta tx
-        } // 2. Compra: Agora NÃO move tokens, apenas avisa (na blockchain) que há interessado
+        } 
+        
+        // 2. Compra: Agora NÃO move tokens, apenas avisa (na blockchain) que há interessado
         else if (tx.getType() == Transaction.Type.BUY_SALE) {
             // Não fazemos nada ao saldo aqui! 
             // O EscrowManager é que vai ler isto e mudar o estado para "Pendente"
             return;
-        } // 3. Confirmação (NOVO): Escrow -> Comprador
+        } 
+        
+        // 3. Confirmação (NOVO): Escrow -> Comprador
         else if (tx.getType() == Transaction.Type.CONFIRM_SALE) {
             // Sender é o Vendedor (que assinou), mas tokens saem do Pool
             String realSender = "ESCROW_POOL";
@@ -95,6 +99,23 @@ public class TokenRegistry implements Serializable {
         return ledger.getOrDefault(walletAddr, new HashMap<>())
                 .getOrDefault(assetID, 0);
     }
+    
+    // >>>> NOVO MÉTODO PARA DISTRIBUIÇÃO DE RENDAS <<<<
+    // Retorna um mapa com todos os donos de um ativo e a quantidade que possuem
+    public Map<String, Integer> getAssetHolders(String assetID) {
+        Map<String, Integer> holders = new HashMap<>();
+        
+        for (String wallet : ledger.keySet()) {
+            Map<String, Integer> assets = ledger.get(wallet);
+            if (assets.containsKey(assetID)) {
+                int qtd = assets.get(assetID);
+                if (qtd > 0) {
+                    holders.put(wallet, qtd);
+                }
+            }
+        }
+        return holders;
+    }
 
     private void updateBalance(String walletAddr, String assetID, int newAmount) {
         ledger.computeIfAbsent(walletAddr, k -> new HashMap<>()).put(assetID, newAmount);
@@ -107,8 +128,10 @@ public class TokenRegistry implements Serializable {
         }
 
         for (String wallet : ledger.keySet()) {
-
-            String idVisual = "..." + wallet.substring(wallet.length() - 15);
+            // Evitar erro se a chave for muito curta (ex: carteiras de sistema)
+            String idVisual = wallet.length() > 15 
+                    ? "..." + wallet.substring(wallet.length() - 15) 
+                    : wallet;
 
             System.out.println("Carteira [" + idVisual + "]");
 
@@ -141,5 +164,4 @@ public class TokenRegistry implements Serializable {
         }
         System.out.println("===============================");
     }
-
 }
