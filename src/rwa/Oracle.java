@@ -55,15 +55,16 @@ public class Oracle {
         
         // 3) CRIAR TRANSAÇÃO DE 1000 TOKENS (MINT)
         // Sender: "SYSTEM", Receiver: Endereço do Criador
-        Transaction mintTx = new Transaction(
+      Transaction mintTx = new Transaction(
                 Transaction.Type.MINT_TOKEN,
                 "SYSTEM",
                 creatorWallet.getAddress(),
                 assetID,
                 1000,
+                0.0,  // <--- ADICIONA ISTO (Preço Zero)
                 "Initial Supply"
         );
-
+      
         // 4) Juntar tudo numa lista (Registo + Tokens no mesmo bloco)
         List<Object> blockData = new ArrayList<>();
         blockData.add(record);

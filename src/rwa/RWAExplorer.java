@@ -8,8 +8,9 @@ import network.Message;
 import network.P2PNode;
 import token.TokenRegistry;
 import token.Wallet;
+import escrow.EscrowManager;
 
-import java.io.File; // <--- Import necessário para listar ficheiros
+import java.io.File;
 import java.util.List;
 import java.util.Scanner;
 
@@ -23,6 +24,7 @@ public class RWAExplorer {
     // Dependências externas
     private P2PNode node;
     private TokenRegistry registry;
+    private EscrowManager escrowManager; // Gestor do Mercado
 
     // Carteira do utilizador atual
     private Wallet myWallet;
@@ -32,8 +34,11 @@ public class RWAExplorer {
         this.oracle = oracle;
         this.validator = validator;
         this.sc = new Scanner(System.in);
+        
+        // Inicializar o gestor de Escrow
+        this.escrowManager = new EscrowManager(bc);
 
-        // --- MUDANÇA: Em vez de criar User Admin, chamamos o Login ---
+        // Iniciar sistema de Login
         loginMenu();
     }
 
@@ -62,7 +67,6 @@ public class RWAExplorer {
             }
         } catch (Exception e) {
             System.out.println("❌ Erro no login: " + e.getMessage());
-            // Fallback para não crashar
             try { this.myWallet = new Wallet("Fallback User"); } catch (Exception ex) {}
         }
     }
@@ -74,10 +78,7 @@ public class RWAExplorer {
         System.out.print("Defina uma Password: ");
         String pass = sc.nextLine();
 
-        // 1. Criar Objeto
         this.myWallet = new Wallet(nome);
-
-        // 2. Salvar no disco (Remove espaços do nome para o ficheiro)
         String filename = nome.replaceAll("\\s+", "");
         this.myWallet.save(filename, pass);
 
@@ -99,7 +100,6 @@ public class RWAExplorer {
         System.out.print("Password: ");
         String pass = sc.nextLine();
 
-        // Tentar carregar
         this.myWallet = Wallet.load(filename, pass);
         System.out.println("✔ Login efetuado! Bem-vindo " + myWallet.getName());
     }
@@ -122,7 +122,11 @@ public class RWAExplorer {
             System.out.println("5 - Registar Renda");
             System.out.println("6 - Listar Rendas");
             System.out.println("7 - Ver Meus Saldos");
-            System.out.println("8 - Transferir Tokens");
+            System.out.println("8 - Transferir Tokens (Direto)");
+            System.out.println("-----------------------------");
+            System.out.println("9  - [MERCADO] Criar Ordem de Venda");
+            System.out.println("10 - [MERCADO] Comprar Tokens");
+            System.out.println("11 - [MERCADO] Confirmar Venda (Vendedor)");
             System.out.println("0 - Sair");
             System.out.print("Opção: ");
 
@@ -140,6 +144,9 @@ public class RWAExplorer {
                     case 6 -> listarRendas();
                     case 7 -> verMeusSaldos();
                     case 8 -> transferirTokens();
+                    case 9 -> criarOrdemVenda();
+                    case 10 -> comprarTokens();
+                    case 11 -> confirmarVenda();
                     case 0 -> {
                         System.out.println("A terminar...");
                         return;
@@ -164,10 +171,8 @@ public class RWAExplorer {
 
             System.out.print("ID do ativo: ");
             String id = sc.nextLine();
-
             System.out.print("Tipo do ativo: ");
             String tipo = sc.nextLine();
-
             System.out.print("Caminho do ficheiro: ");
             String path = sc.nextLine();
 
@@ -188,7 +193,6 @@ public class RWAExplorer {
         for (Block b : blockchain.getBlocks()) {
             List<Object> dados = b.getData().getElements();
             if (dados.isEmpty()) continue;
-
             for (Object obj : dados) {
                 if (obj instanceof RWARecord) {
                     printRWA((RWARecord) obj);
@@ -213,10 +217,8 @@ public class RWAExplorer {
             System.out.print("ID do RWA: ");
             String id = sc.nextLine();
             RWARecord alvo = null;
-
             for (Block b : blockchain.getBlocks()) {
-                List<Object> dados = b.getData().getElements();
-                for (Object obj : dados) {
+                for (Object obj : b.getData().getElements()) {
                     if (obj instanceof RWARecord && ((RWARecord) obj).getAssetID().equals(id)) {
                         alvo = (RWARecord) obj;
                         break;
@@ -229,7 +231,6 @@ public class RWAExplorer {
                 System.out.println("❌ RWA não encontrado!");
                 return;
             }
-
             System.out.print("Caminho do ficheiro REAL: ");
             String path = sc.nextLine();
             boolean ok = validator.validar(alvo, path);
@@ -253,7 +254,7 @@ public class RWAExplorer {
     }
 
     // ================================
-    // 5 — REGISTAR RENDA
+    // 5 & 6 — RENDAS
     // ================================
     private void registarRenda() {
         try {
@@ -261,7 +262,6 @@ public class RWAExplorer {
             String id = sc.nextLine();
             System.out.print("Valor da renda (€): ");
             double valor = Double.parseDouble(sc.nextLine());
-
             oracle.registarRenda(id, valor);
             System.out.println("✔ Renda registada com sucesso!");
             propagarUltimoBloco();
@@ -270,29 +270,16 @@ public class RWAExplorer {
         }
     }
 
-    // ================================
-    // 6 — LISTAR RENDAS
-    // ================================
     private void listarRendas() {
         System.out.println("\n===== RENDAS NA BLOCKCHAIN =====\n");
         for (Block b : blockchain.getBlocks()) {
-            List<Object> dados = b.getData().getElements();
-            if (dados.isEmpty()) continue;
-
-            for (Object obj : dados) {
+            for (Object obj : b.getData().getElements()) {
                 if (obj instanceof RentDistributionEvent) {
-                    printRenda((RentDistributionEvent) obj);
+                    RentDistributionEvent e = (RentDistributionEvent) obj;
+                    System.out.println("Ativo: " + e.getAssetID() + " | " + e.getAmount() + "€ | " + new java.util.Date(e.getTimestamp()));
                 }
             }
         }
-    }
-
-    private void printRenda(RentDistributionEvent e) {
-        System.out.println("---------------------------------");
-        System.out.println("Ativo: " + e.getAssetID());
-        System.out.println("Renda: " + e.getAmount() + " €");
-        System.out.println("Data: " + new java.util.Date(e.getTimestamp()));
-        System.out.println("---------------------------------");
     }
 
     // ================================
@@ -303,12 +290,11 @@ public class RWAExplorer {
             System.out.println("Erro: TokenRegistry não configurado.");
             return;
         }
-        
-        // Sincronizar para garantir dados frescos
+        System.out.println("\n===== MEUS SALDOS =====");
+        System.out.println("Wallet Addr: " + myWallet.getAddress());
         registry.sync(blockchain);
-
-        // MUDANÇA AQUI: Chamamos o método específico passando o nosso endereço
         registry.printWalletBalance(myWallet.getAddress());
+        System.out.println("=======================");
     }
 
     // ================================
@@ -316,70 +302,195 @@ public class RWAExplorer {
     // ================================
     private void transferirTokens() {
         try {
-            if (myWallet == null) {
-                System.out.println("ERRO: Nenhuma carteira configurada.");
-                return;
-            }
-
-            System.out.println("\n--- TRANSFERENCIA DE TOKENS ---");
-            System.out.print("ID do Ativo (ex: 5): ");
+            if (myWallet == null) return;
+            System.out.println("\n--- TRANSFERENCIA DIRETA P2P ---");
+            System.out.print("ID do Ativo: ");
             String assetId = sc.nextLine();
 
             // Verificar Saldo
             if (registry != null) {
                 registry.sync(blockchain);
                 int saldo = registry.getBalance(myWallet.getAddress(), assetId);
-                System.out.println("Teu Saldo Atual: " + saldo);
+                System.out.println("Saldo Atual: " + saldo);
                 if (saldo <= 0) {
-                    System.out.println("❌ Não tens tokens deste ativo para enviar.");
+                    System.out.println("❌ Saldo insuficiente.");
                     return;
                 }
             }
 
-            System.out.println("Destinatário (Cola a Chave Pública/Address): ");
+            System.out.println("Destinatário (Public Key): ");
             String receiverAddress = sc.nextLine();
-
             if (receiverAddress.equals(myWallet.getAddress())) {
-                System.out.println("❌ Não podes enviar para ti próprio.");
+                System.out.println("❌ Erro: Destino igual a origem.");
                 return;
             }
 
-            System.out.print("Quantidade a enviar: ");
+            System.out.print("Quantidade: ");
             int amount = Integer.parseInt(sc.nextLine());
 
-            if (amount <= 0) {
-                System.out.println("❌ Quantidade inválida.");
-                return;
-            }
-
-            // Criar Transação
+            // Criar Transação (Preço 0.0 pois é transferencia direta)
             Transaction tx = new Transaction(
                     Transaction.Type.TRANSFER_TOKEN,
                     myWallet.getAddress(),
                     receiverAddress,
                     assetId,
                     amount,
+                    0.0,
                     "Transferencia P2P"
             );
-
-            // Assinar
             tx.sign(myWallet.getPrivateKey());
 
             if (!tx.isValid()) {
-                System.out.println("❌ Erro critico: Falha na assinatura digital.");
+                System.out.println("❌ Falha na assinatura digital.");
                 return;
             }
 
-            // Adicionar à blockchain
-            java.util.List<Object> blockData = java.util.List.of(tx);
-            blockchain.add(blockData);
-
-            System.out.println("✔ Transação realizada com sucesso!");
+            blockchain.add(java.util.List.of(tx));
+            System.out.println("✔ Transferência realizada!");
             propagarUltimoBloco();
 
         } catch (Exception e) {
-            System.out.println("Erro na transferencia: " + e.getMessage());
-            e.printStackTrace();
+            System.out.println("Erro: " + e.getMessage());
+        }
+    }
+    
+    // ================================
+    // 9 - MERCADO: CRIAR VENDA
+    // ================================
+    private void criarOrdemVenda() {
+        try {
+            System.out.println("\n--- CRIAR VENDA NO ESCROW ---");
+            System.out.print("ID do Ativo: ");
+            String assetId = sc.nextLine();
+            
+            System.out.print("Quantidade a vender: ");
+            int qtd = Integer.parseInt(sc.nextLine());
+            
+            System.out.print("Preço Total (€): ");
+            double preco = Double.parseDouble(sc.nextLine());
+
+            // Venda: Sender -> "ESCROW" (TokenRegistry gere isto)
+            Transaction tx = new Transaction(
+                    Transaction.Type.CREATE_SALE,
+                    myWallet.getAddress(),
+                    "ESCROW",
+                    assetId,
+                    qtd,
+                    preco,
+                    "Venda Marketplace"
+            );
+            tx.sign(myWallet.getPrivateKey());
+
+            blockchain.add(java.util.List.of(tx));
+            System.out.println("✔ Oferta de venda criada! Tokens bloqueados no Escrow.");
+            propagarUltimoBloco();
+
+        } catch (Exception e) {
+            System.out.println("Erro: " + e.getMessage());
+        }
+    }
+
+    // ================================
+    // 10 - MERCADO: COMPRAR (RESERVAR)
+    // ================================
+    private void comprarTokens() {
+        System.out.println("\n--- MERCADO (ORDENS ABERTAS) ---");
+        List<Transaction> orders = escrowManager.getOpenOrders();
+        
+        if (orders.isEmpty()) {
+            System.out.println("Nenhuma venda ativa.");
+            return;
+        }
+
+        for (int i = 0; i < orders.size(); i++) {
+            Transaction t = orders.get(i);
+            String sellerShort = t.getSender().substring(0, 10);
+            System.out.printf("[%d] %s | Qtd: %d | Preço: %.2f € | Vendedor: %s...\n", 
+                    i, t.getAssetID(), t.getAmount(), t.getPrice(), sellerShort);
+        }
+
+        System.out.print("\nQual número queres comprar? (-1 sair): ");
+        try {
+            int idx = Integer.parseInt(sc.nextLine());
+            if (idx < 0 || idx >= orders.size()) return;
+
+            Transaction offer = orders.get(idx);
+            if (offer.getSender().equals(myWallet.getAddress())) {
+                System.out.println("❌ Não podes comprar a tua própria venda!");
+                return;
+            }
+
+            System.out.println("A reservar compra...");
+            
+            Transaction buyTx = new Transaction(
+                    Transaction.Type.BUY_SALE,
+                    myWallet.getAddress(),
+                    myWallet.getAddress(),
+                    offer.getAssetID(),
+                    offer.getAmount(),
+                    offer.getPrice(),
+                    "Reserva de Compra"
+            );
+            
+            // Ligar à venda original
+            buyTx.setTransactionRef(offer.getTransactionID());
+            buyTx.sign(myWallet.getPrivateKey());
+
+            blockchain.add(java.util.List.of(buyTx));
+            System.out.println("✔ Reserva efetuada! Aguarde a confirmação do vendedor.");
+            propagarUltimoBloco();
+
+        } catch (Exception e) {
+            System.out.println("Erro: " + e.getMessage());
+        }
+    }
+    
+    // ================================
+    // 11 - MERCADO: CONFIRMAR (LIBERTAR)
+    // ================================
+    private void confirmarVenda() {
+        System.out.println("\n--- VENDAS PENDENTES DE APROVAÇÃO ---");
+        List<Transaction> requests = escrowManager.getPendingApprovals(myWallet.getAddress());
+        
+        if (requests.isEmpty()) {
+            System.out.println("Não tens vendas com compradores à espera.");
+            return;
+        }
+
+        for (int i = 0; i < requests.size(); i++) {
+            Transaction buy = requests.get(i);
+            Transaction originalSale = escrowManager.getSaleByRef(buy.getTransactionRef());
+            System.out.printf("[%d] Comprador: %s... | Ativo: %s | Valor: %.2f €\n", 
+                    i, buy.getSender().substring(0, 10), originalSale.getAssetID(), originalSale.getPrice());
+        }
+
+        System.out.print("Confirmar recebimento e libertar tokens? (nº ou -1): ");
+        try {
+            int idx = Integer.parseInt(sc.nextLine());
+            if (idx >= 0 && idx < requests.size()) {
+                Transaction buyTx = requests.get(idx);
+                Transaction saleTx = escrowManager.getSaleByRef(buyTx.getTransactionRef());
+                
+                // Transação final: ESCROW -> COMPRADOR
+                Transaction confirmTx = new Transaction(
+                        Transaction.Type.CONFIRM_SALE,
+                        myWallet.getAddress(), // Vendedor assina
+                        buyTx.getSender(),     // Destino = Comprador
+                        saleTx.getAssetID(),
+                        saleTx.getAmount(),
+                        saleTx.getPrice(),
+                        "Libertação Escrow"
+                );
+                
+                confirmTx.setTransactionRef(saleTx.getTransactionID());
+                confirmTx.sign(myWallet.getPrivateKey());
+                
+                blockchain.add(java.util.List.of(confirmTx));
+                System.out.println("✔ Tokens libertados do Escrow com sucesso!");
+                propagarUltimoBloco();
+            }
+        } catch (Exception e) {
+             System.out.println("Erro: " + e.getMessage());
         }
     }
 

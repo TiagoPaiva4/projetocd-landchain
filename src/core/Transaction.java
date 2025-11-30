@@ -9,78 +9,89 @@ import utils.SecurityUtils;
 public class Transaction implements Serializable {
 
     public enum Type {
-        ORACLE_REGISTER,            // Registo do RWA (Metadados)
-        MINT_TOKEN,                 // Criação dos 1000 Tokens iniciais
-        TRANSFER_TOKEN,             // Enviar tokens entre carteiras
-        RENT_DISTRIBUTION,          // Pagar renda
-        CONVERSION_FUNGIBLE_TO_NFT  // Opcional
+        ORACLE_REGISTER,
+        MINT_TOKEN,
+        TRANSFER_TOKEN,
+        RENT_DISTRIBUTION,
+        
+        // NOVOS TIPOS PARA O ESCROW
+        CREATE_SALE, // Vendedor coloca à venda
+        BUY_SALE,     // Comprador aceita a venda
+        CONFIRM_SALE    // Vendedor liberta para o comprador (NOVO)
     }
 
     private Type type;
-    private String sender;      // Chave Pública do Remetente (Base64) ou "SYSTEM"
-    private String receiver;    // Chave Pública do Destino (Base64)
-    private String assetID;     // ID do RWA (ex: "LISBOA-001")
-    private int amount;         // Quantidade de tokens
+    private String sender;
+    private String receiver;
+    private String assetID;
+    private int amount;
     
-    private String data;        // Dados extra (opcional)
-    private long timestamp;
-    private byte[] signature;   // Assinatura de segurança
+    // NOVO CAMPO: Preço (em Euros, apenas informativo nesta versão)
+    private double price; 
+    
+    // NOVO CAMPO: Referência (para o Comprador dizer qual venda está a comprar)
+    private String transactionRef; 
 
-    // Construtor Completo
-    public Transaction(Type type, String sender, String receiver, String assetID, int amount, String data) {
+    private String data;
+    private long timestamp;
+    private byte[] signature;
+
+    // Construtor Atualizado (Compatível com o antigo + novos campos)
+    public Transaction(Type type, String sender, String receiver, String assetID, int amount, double price, String data) {
         this.type = type;
         this.sender = sender;
         this.receiver = receiver;
         this.assetID = assetID;
         this.amount = amount;
+        this.price = price;
         this.data = data;
         this.timestamp = System.currentTimeMillis();
     }
 
-    // Assinar a transação com a Chave Privada da Wallet
+    // Setter para referência (usado na compra)
+    public void setTransactionRef(String ref) {
+        this.transactionRef = ref;
+    }
+    
+    public String getTransactionRef() { return transactionRef; }
+    public double getPrice() { return price; }
+
+    // Assinar (Incluindo os novos campos na assinatura para segurança)
     public void sign(PrivateKey key) throws Exception {
-        // Concatenamos os dados críticos para garantir que ninguém os alterou
-        String content = type + sender + receiver + assetID + amount + timestamp;
+        String content = type.toString() + sender + receiver + assetID + amount + price + timestamp + (transactionRef != null ? transactionRef : "");
         this.signature = SecurityUtils.sign(content.getBytes(), key);
     }
 
-    // Verificar se a assinatura é válida
     public boolean isValid() {
-        // Se for emissão do sistema (MINT), não precisa de assinatura de carteira
-        if (type == Type.MINT_TOKEN && sender.equals("SYSTEM")) {
-            return true;
-        }
-        
+        if (type == Type.MINT_TOKEN && sender.equals("SYSTEM")) return true;
         if (signature == null) return false;
-
         try {
-            String content = type + sender + receiver + assetID + amount + timestamp;
-            // Converter a String sender de volta para PublicKey
+            String content = type.toString() + sender + receiver + assetID + amount + price + timestamp + (transactionRef != null ? transactionRef : "");
             byte[] keyBytes = Base64.getDecoder().decode(sender);
             PublicKey pubKey = SecurityUtils.getPublicKey(keyBytes);
-            
             return SecurityUtils.verifySign(content.getBytes(), signature, pubKey);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return false;
-        }
+        } catch (Exception e) { return false; }
     }
 
-    // Getters
+    // Getters antigos mantêm-se...
     public Type getType() { return type; }
     public String getSender() { return sender; }
     public String getReceiver() { return receiver; }
     public String getAssetID() { return assetID; }
     public int getAmount() { return amount; }
-    public String getData() { return data; }
-
+    public long getTimestamp() { return timestamp; }
+    
+    // Método auxiliar para obter o ID único da transação (Hash da assinatura serve como ID)
+    public String getTransactionID() {
+        // CORREÇÃO: Se a assinatura for nula (ex: MINT do sistema), geramos um ID alternativo
+        if (signature == null) {
+            return "SYSTEM_TX_" + type + "_" + timestamp + "_" + assetID;
+        }
+        return Base64.getEncoder().encodeToString(signature);
+    }
+    
     @Override
     public String toString() {
-        return String.format("[%s] %s -> %s | %d Tokens (%s)", 
-                type, 
-                sender.equals("SYSTEM") ? "SYSTEM" : sender.substring(0, 10) + "...", 
-                receiver.substring(0, 10) + "...", 
-                amount, 
-                assetID);
+        return type + " | " + amount + " tokens | " + price + " EUR";
     }
 }
