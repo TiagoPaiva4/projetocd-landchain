@@ -115,31 +115,44 @@ public class RemoteNodeObject extends UnicastRemoteObject implements RemoteNodeI
     }
 //::::::::::: T R A NS A C T IO N S  :::::::::::
 
+    // ::::::::::: T R A N S A C T I O N S :::::::::::
     @Override
     public void addTransaction(String data) throws RemoteException {
+        // 1. SEGURANÇA: Validar assinatura digital antes de aceitar
+        if (!TemplarTransaction.isValid(data)) {
+            System.err.println("ALERTA: Tentativa de transação falsa rejeitada de " + getRemoteHost());
+            return; // Sai imediatamente, não adiciona à lista nem propaga
+        }
+
+        // 2. Lógica de duplicados (se já tenho, ignoro)
         if (this.transactions.contains(data)) {
             return;
         }
-        this.transactions.add(data);
-        for (RemoteNodeInterface node : network) {
-            //uma thread para ligar a cada no
-            new Thread(() -> {
-                try {
-                    node.addTransaction(data);
-                } catch (Exception e) {
-                    network.remove(node);
-                }
-            }).start();
 
+        // 3. Adicionar e Propagar
+        this.transactions.add(data);
+        
+        // Broadcast para os outros nós
+        for (RemoteNodeInterface node : network) {
+            try {
+                node.addTransaction(data);
+            } catch (Exception e) {
+                // Ignorar nós desligados
+            }
         }
+
+        // 4. Notificar a GUI (Listener)
         if (listener != null) {
-            listener.onConect("");
-            listener.onTransaction(data);
+            // Mostra os dados descodificados (ex: "Casa T3 - Dono: Tiago")
+            String dadosReais = TemplarTransaction.getData(data);
+            listener.onTransaction(dadosReais); 
         } else {
-            System.out.println("Transaction from  " + getRemoteHost());
+            System.out.println("Transação RWA validada de " + getRemoteHost());
         }
+        
+        // Debug na consola
         for (String t : transactions) {
-            System.out.println(t);
+            System.out.println(TemplarTransaction.getData(t));
         }
     }
 

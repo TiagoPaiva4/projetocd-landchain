@@ -275,21 +275,33 @@ public class TemplarCoin extends javax.swing.JFrame {
 
     private void btAddTransactionActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btAddTransactionActionPerformed
         try {
-            String txtSender = txtTransactionSender.getText();
-            String pass = new String(txtTransactionPassword.getPassword());
-            String txtReceiver = txtTransactionReceiver.getText();
-            double value = Double.parseDouble(txtTransactionvalue.getText());
-            //criar a transação
-            TemplarTransaction t = new TemplarTransaction(txtSender, txtReceiver, value, pass);
-            remoteObject.addTransaction(utils.Utils.ObjectToBase64(t));
-            txtReceiverPublicKey.setText("");
-            txtTransactionReceiver.setText("");
-            txtTransactionvalue.setText("");
-            JOptionPane.showMessageDialog(this, "Transaction registered", "Transaction", JOptionPane.INFORMATION_MESSAGE);
+        // 1. Recolher dados da GUI
+        // Assumindo que tens campos de texto para nome, valor, etc.
+        // Se só tiveres um campo txtTransaction, usa esse.
+        String dadosDoAtivo = txtTransaction.getText(); 
+        
+        // Exemplo: Se tiveres a tua classe RWARecord, podes fazer assim:
+        // RWARecord rwa = new RWARecord("NomeAtivo", "Valor", "Dono");
+        // String dadosDoAtivo = rwa.toString();
 
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, ex.getMessage(), "New Block", JOptionPane.WARNING_MESSAGE);
-        }
+        // 2. Obter as chaves do utilizador (do TemplarUser ou WalletManager)
+        // Se estiveres a usar o TemplarUser do professor:
+        java.security.PrivateKey privKey = myUser.getPrivateKey();
+        java.security.PublicKey pubKey = myUser.getPublicKey();
+
+        // 3. Criar o pacote seguro (Assinar)
+        String transacaoSegura = TemplarTransaction.create(dadosDoAtivo, privKey, pubKey);
+
+        // 4. Enviar para a rede via RMI
+        myremoteObject.addTransaction(transacaoSegura);
+        
+        // Limpar o campo
+        txtTransaction.setText("");
+        
+    } catch (Exception ex) {
+        JOptionPane.showMessageDialog(this, "Erro ao criar RWA: " + ex.getMessage());
+        ex.printStackTrace();
+    }
 
     }//GEN-LAST:event_btAddTransactionActionPerformed
 

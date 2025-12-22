@@ -33,8 +33,8 @@ import java.util.List;
  * @author manso - computer
  */
 public class Utils {
-    
-     /**
+
+    /**
      * concatenate two byte arrays
      *
      * @param array1 first byte array
@@ -46,11 +46,10 @@ public class Utils {
         System.arraycopy(array2, 0, result, array1.length, array2.length);
         return result;
     }
-      
-    
+
     /**
-     * Converts a double value into an array of 8 bytes.
-     * Uses a ByteBuffer to handle the binary conversion safely.
+     * Converts a double value into an array of 8 bytes. Uses a ByteBuffer to
+     * handle the binary conversion safely.
      *
      * @param value The double value to convert.
      * @return A byte array representing the double value.
@@ -58,10 +57,10 @@ public class Utils {
     public static byte[] doubleToBytes(double value) {
         return ByteBuffer.allocate(8).putDouble(value).array();
     }
-    
-      /**
-     * Converts a double value into an array of 8 bytes.
-     * Uses a ByteBuffer to handle the binary conversion safely.
+
+    /**
+     * Converts a double value into an array of 8 bytes. Uses a ByteBuffer to
+     * handle the binary conversion safely.
      *
      * @param value The double value to convert.
      * @return A byte array representing the double value.
@@ -69,11 +68,10 @@ public class Utils {
     public static byte[] longToBytes(long value) {
         return ByteBuffer.allocate(8).putLong(value).array();
     }
-    
 
     /**
-     * Converts an array of 8 bytes back into a double value.
-     * The byte order (endianness) must match the one used during conversion.
+     * Converts an array of 8 bytes back into a double value. The byte order
+     * (endianness) must match the one used during conversion.
      *
      * @param bytes The byte array to convert (must be 8 bytes long).
      * @return The reconstructed double value.
@@ -108,6 +106,24 @@ public class Utils {
             }
             oos.flush();
             return Base64.getEncoder().encodeToString(baos.toByteArray());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public static String ObjectToBase64(Object obj) {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream(); ObjectOutputStream oos = new ObjectOutputStream(baos)) {
+            oos.writeObject(obj);
+            oos.flush();
+            return Base64.getEncoder().encodeToString(baos.toByteArray());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+    public static Object  base64ToObject(String txtb64 ) {
+        byte[] data = Base64.getDecoder().decode(txtb64);
+        try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(data))) {
+            return (Serializable) ois.readObject();
         } catch (Exception e) {
             return null;
         }
@@ -154,8 +170,6 @@ public class Utils {
         }
     }
 
-   
-
     /**
      * Converte um array de bytes para base 64
      *
@@ -170,6 +184,7 @@ public class Utils {
         }
         return b64.substring(0, size - 3) + "...";
     }
+
     /**
      * Converte um array de bytes para base 64
      *
@@ -196,11 +211,14 @@ public class Utils {
         return txt.substring(0, txt.length() - 1);
     }
 
-
     //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
     private static final long serialVersionUID = 202510081453L;
     //:::::::::::::::::::::::::::  Copyright(c) M@nso  2025  :::::::::::::::::::
 
-
+    public static void main(String[] args) {
+        String s = "ola";
+        String b = ObjectToBase64(s);
+        System.out.println((String) base64ToObject(b) );
+    }
 ///////////////////////////////////////////////////////////////////////////
 }

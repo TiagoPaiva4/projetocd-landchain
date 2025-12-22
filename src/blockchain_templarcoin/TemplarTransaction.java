@@ -1,103 +1,86 @@
-//::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
-//::                                                                         ::
-//::     Antonio Manuel Rodrigues Manso                                      ::
-//::                                                                         ::
-//::     I N S T I T U T O    P O L I T E C N I C O   D E   T O M A R        ::
-//::     Escola Superior de Tecnologia de Tomar                              ::
-//::     e-mail: manso@ipt.pt                                                ::
-//::     url   : http://orion.ipt.pt/~manso                                  ::
-//::                                                                         ::
-//::     This software was build with the purpose of investigate and         ::
-//::     learning.                                                           ::
-//::                                                                         ::
-//::                                                               (c)2025   ::
-//:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
- //////////////////////////////////////////////////////////////////////////////
-
 package blockchain_templarcoin;
 
-import java.io.Serializable;
+import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.util.Base64;
 import utils.SecurityUtils;
-import utils.Utils;
 
 /**
- * Created on 14/10/2025, 11:47:10
- *
- * @author manso - computer
+ * Esta classe gere o formato seguro das transações RWA.
+ * Formato: CHAVE_PUBLICA_BASE64 || ASSINATURA_BASE64 || DADOS_RWA_BASE64
  */
-public class TemplarTransaction implements Serializable {
+public class TemplarTransaction {
 
-    //atributos auxiliares (apagar em produção)
-    String txtSender;
-    String txtReceiver;
+    // Separador seguro para dividir os campos da mensagem
+    private static final String SEPARATOR = "||";
 
-    PublicKey sender;
-    PublicKey receiver;
-    long timestamp;
-    double value;
-    byte[] signature;
+    /**
+     * Cria uma transação assinada pronta para ser enviada para a rede.
+     * * @param rwaData - Os dados do ativo (ex: JSON ou String do RWARecord)
+     * @param privateKey - A chave privada do dono (para assinar)
+     * @param publicKey - A chave pública do dono (para validar)
+     * @return String formatada e pronta para o addTransaction()
+     */
+    public static String create(String rwaData, PrivateKey privateKey, PublicKey publicKey) throws Exception {
+        // 1. Converter os dados do RWA para Base64 (garante que não há caracteres estragados)
+        String rwaDataBase64 = Base64.getEncoder().encodeToString(rwaData.getBytes());
 
-    public TemplarTransaction(String senderName, String receiverName, double val, String pass) throws Exception {
-        //ler as credenciais do sender e do receiver
-        TemplarUser uSender = TemplarUser.login(senderName, pass);
-        TemplarUser uReceiver = TemplarUser.login(receiverName);
+        // 2. Assinar os dados (assinamos a versão Base64 para garantir integridade exata)
+        byte[] signature = SecurityUtils.sign(rwaDataBase64.getBytes(), privateKey);
+        String signatureBase64 = Base64.getEncoder().encodeToString(signature);
 
-        this.txtSender = uSender.getUserName();
-        this.sender = uSender.getPublicKey();
+        // 3. Converter a chave pública para Base64
+        String publicKeyBase64 = Base64.getEncoder().encodeToString(publicKey.getEncoded());
 
-        this.txtReceiver = uReceiver.getUserName();
-        this.receiver = uReceiver.getPublicKey();
-
-        this.value = val;
-
-        this.timestamp = System.currentTimeMillis();
-
-        //juntar os bytes de todos os dados
-        byte[] allData = Utils.concatenate(this.sender.getEncoded(), this.receiver.getEncoded());
-        allData = Utils.concatenate(allData, Utils.doubleToBytes(value));
-        allData = Utils.concatenate(allData, Utils.longToBytes(timestamp));
-        //assinar
-        this.signature = SecurityUtils.sign(allData, uSender.getPrivateKey());
+        // 4. Juntar tudo numa String única
+        return publicKeyBase64 + SEPARATOR + signatureBase64 + SEPARATOR + rwaDataBase64;
     }
 
-    
+    /**
+     * Valida se uma transação recebida é autêntica.
+     * * @param transactionBlock - A string completa recebida da rede
+     * @return true se a assinatura corresponder aos dados e à chave pública
+     */
+    public static boolean isValid(String transactionBlock) {
+        try {
+            // Separar os campos usando o separador (com escape para regex)
+            String[] parts = transactionBlock.split(java.util.regex.Pattern.quote(SEPARATOR));
+            
+            // Tem de ter exatamente 3 partes
+            if (parts.length != 3) {
+                return false;
+            }
 
-    public String getTxtSender() {
-        return txtSender;
-    }
+            String pubKeyB64 = parts[0];
+            String sigB64 = parts[1];
+            String dataB64 = parts[2]; // Isto são os dados RWA em Base64
 
-    public String getTxtReceiver() {
-        return txtReceiver;
-    }
+            // Converter de volta de Base64 para objetos Java
+            PublicKey pubKey = SecurityUtils.getPublicKey(Base64.getDecoder().decode(pubKeyB64));
+            byte[] signature = Base64.getDecoder().decode(sigB64);
+            byte[] dataBytes = dataB64.getBytes(); 
 
-    public PublicKey getSender() {
-        return sender;
-    }
+            // Verificar criptograficamente a assinatura
+            return SecurityUtils.verify(dataBytes, signature, pubKey);
 
-    public PublicKey getReceiver() {
-        return receiver;
-    }
-
-    public double getValue() {
-        return value;
-    }
-
-    public byte[] getSignature() {
-        return signature;
-    }
-
-    @Override
-    public String toString() {
-        return txtSender + " -> " + value + " -> " + txtReceiver;
+        } catch (Exception e) {
+            // Se der erro no parse ou na validação
+            return false;
+        }
     }
     
-    
-
-    //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-    private static final long serialVersionUID = 202510141147L;
-    //:::::::::::::::::::::::::::  Copyright(c) M@nso  2025  :::::::::::::::::::
-
-
-///////////////////////////////////////////////////////////////////////////
+    /**
+     * Recupera os dados originais (legíveis) da transação para mostrar na GUI.
+     */
+    public static String getData(String transactionBlock) {
+         try {
+            String[] parts = transactionBlock.split(java.util.regex.Pattern.quote(SEPARATOR));
+            if (parts.length < 3) return "Dados Inválidos";
+            
+            String dataB64 = parts[2];
+            return new String(Base64.getDecoder().decode(dataB64));
+        } catch (Exception e) {
+            return "Erro a ler dados";
+        }
+    }
 }
