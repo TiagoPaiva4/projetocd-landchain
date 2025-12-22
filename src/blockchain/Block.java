@@ -14,7 +14,7 @@
 //:::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
  //////////////////////////////////////////////////////////////////////////////
 
-package core;
+package blockchain;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -26,7 +26,6 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Date;
 import java.util.List;
-import utils.SecurityUtils;
 import utils.Utils;
 
 /**
@@ -76,6 +75,16 @@ public class Block implements Serializable {
         bytes = Utils.concatenate(bytes, Utils.toBytes(previousHash));
         bytes = Utils.concatenate(bytes, Utils.toBytes(merkleRoot));
         return Utils.concatenate(bytes, Utils.toBytes(dificulty));
+
+    }
+
+    /**
+     * data to be mined
+     *
+     * @return base64 string of header of block
+     */
+    public String getHeaderDataBase64() {
+        return Base64.getEncoder().encodeToString(getHeaderData());
     }
 
     /**
@@ -84,9 +93,13 @@ public class Block implements Serializable {
      * @throws Exception
      */
     public void mine() throws Exception {
-        String dataTxt = Base64.getEncoder().encodeToString(getHeaderData());
-        int pow = Miner.getNonce(dataTxt, this.dificulty);
+        String dataTxt = getHeaderDataBase64();
+        int pow = MinerDistibuted.getNonce(dataTxt, this.dificulty);
         setNonce(pow);
+    }
+    
+    public List getTransactions(){
+        return data.elements;
     }
 
     /**
@@ -97,28 +110,28 @@ public class Block implements Serializable {
      */
     public void setNonce(int nonce) throws Exception {
         this.nonce = nonce;
-        String hash = Base64.getEncoder().encodeToString(getHeaderData());
-        this.currentHash = SecurityUtils.calculateHash(
-                (hash + nonce).getBytes(), Miner.hashAlgorithm);
+        this.currentHash = MinerDistibuted.getHash(getHeaderDataBase64() + nonce).getBytes();
+        if (!isValid()) {
+            throw new Exception("Nonce not valid " + nonce);
+        }
     }
 
     public String toStringHeader() {
-        StringBuilder txt = new StringBuilder();
-        txt.append("ID ").append(ID);
-        txt.append("\nHash ").append(Base64.getEncoder().encodeToString(currentHash));
+        StringBuilder txt = new StringBuilder("-----------------");
+        txt.append("\nID ").append(ID);
         txt.append("\ntimestamp ").append(new Date(timestamp));
-        txt.append("\npreviousHash ").append(Base64.getEncoder().encodeToString(previousHash));
+        txt.append("\npreviousHash ").append(new String(previousHash));
         txt.append("\nmerkleRoot ").append(Base64.getEncoder().encodeToString(merkleRoot));
         txt.append("\ndificulty ").append(dificulty);
-        txt.append("\nnonce ").append(nonce);
-        
-        
+        txt.append("\nNONCE ").append(nonce);
+        txt.append("\nHASH ").append(new String(currentHash));
         return txt.toString();
     }
 
     @Override
     public String toString() {
         StringBuilder txt = new StringBuilder(toStringHeader());
+
         txt.append("\n-------- data--------\n");
         for (Object element : data.getElements()) {
             txt.append(element).append("\n");
@@ -136,7 +149,7 @@ public class Block implements Serializable {
     public boolean isValid() {
         try {
             //:::::::::: zeros no inicio :::::::::::::::::::::::::
-            String txtHash = Base64.getEncoder().encodeToString(currentHash);
+            String txtHash = new String(currentHash);
             String hashZeros = txtHash.substring(0, this.dificulty);
             String allZeros = String.format("%0" + dificulty + "d", 0);
             if (!hashZeros.equals(allZeros)) {
@@ -144,9 +157,7 @@ public class Block implements Serializable {
             }
 
             //:::::::::: o hash é valido ::::::::::::::::::::::::::::
-            txtHash = Base64.getEncoder().encodeToString(getHeaderData()) + nonce;
-            byte[] myHash = SecurityUtils.calculateHash(
-                    txtHash.getBytes(), Miner.hashAlgorithm);
+            byte[] myHash = MinerDistibuted.getHash(getHeaderDataBase64() + nonce).getBytes();
             return Arrays.equals(myHash, currentHash);
         } catch (Exception ex) {
             return false;
@@ -212,6 +223,21 @@ public class Block implements Serializable {
 
     public byte[] getCurrentHash() {
         return currentHash;
+    }
+
+    @Override
+    public int hashCode() {
+        int hash = 5;
+        return hash;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        try {
+            return Arrays.equals(this.currentHash, ((Block)obj).currentHash);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     //::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
