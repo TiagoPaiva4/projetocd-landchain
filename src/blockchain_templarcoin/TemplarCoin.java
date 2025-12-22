@@ -32,6 +32,7 @@ public class TemplarCoin extends javax.swing.JFrame {
         this();
         this.user = user;
         this.remoteObject = remoteObject;
+        // Atualiza a GUI com os dados do utilizador logado
         txtSenderPublicKey.setText(Utils.toString(user.getPublicKey().getEncoded()));
         txtTransactionSender.setText(user.getUserName());
     }
@@ -257,61 +258,76 @@ public class TemplarCoin extends javax.swing.JFrame {
 
     private void btSignActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btSignActionPerformed
         try {
-            String txtSender = txtTransactionSender.getText();
-            String pass = new String(txtTransactionPassword.getPassword());
-            String txtReceiver = txtTransactionReceiver.getText();
-            double value = Double.parseDouble(txtTransactionvalue.getText());
-            //criar a transação
-            TemplarTransaction t = new TemplarTransaction(txtSender, txtReceiver, value, pass);
+            // Construir a mensagem do RWA
+            String nomeAtivo = txtTransactionReceiver.getText();
+            String valor = txtTransactionvalue.getText();
+            String dados = "Ativo: " + nomeAtivo + " | Valor: " + valor + " | Dono: " + user.getUserName();
 
-            //mostrar a transação
-            txtSenderPublicKey.setText(Utils.toString(t.getSender().getEncoded()));
-            txtReceiverPublicKey.setText(Utils.toString(t.getReceiver().getEncoded()));
-            txtSignature.setText(Utils.toString(t.getSignature()));
+            // Assinar
+            String transacaoSegura = TemplarTransaction.create(dados, user.getPrivateKey(), user.getPublicKey());
+
+            // Mostrar partes para debug
+            String[] parts = transacaoSegura.split(java.util.regex.Pattern.quote("||"));
+            txtSenderPublicKey.setText("PK: " + parts[0].substring(0, 20) + "...");
+            txtSignature.setText(parts[1]); // Assinatura
+            
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, ex.getMessage(), "Sign", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Erro ao Assinar", JOptionPane.WARNING_MESSAGE);
         }
     }//GEN-LAST:event_btSignActionPerformed
 
     private void btAddTransactionActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btAddTransactionActionPerformed
         try {
-        // 1. Recolher dados da GUI
-        // Assumindo que tens campos de texto para nome, valor, etc.
-        // Se só tiveres um campo txtTransaction, usa esse.
-        String dadosDoAtivo = txtTransaction.getText(); 
-        
-        // Exemplo: Se tiveres a tua classe RWARecord, podes fazer assim:
-        // RWARecord rwa = new RWARecord("NomeAtivo", "Valor", "Dono");
-        // String dadosDoAtivo = rwa.toString();
+            // 1. Construir os dados do Ativo (usando os campos que tens)
+            String nomeAtivo = txtTransactionReceiver.getText();
+            String valor = txtTransactionvalue.getText();
+            
+            // Podes formatar isto como JSON se preferires, aqui vai como texto simples
+            String dadosDoAtivo = "RWA REGISTO >> Nome: " + nomeAtivo + ", Valor: " + valor + ", Criado por: " + user.getUserName();
 
-        // 2. Obter as chaves do utilizador (do TemplarUser ou WalletManager)
-        // Se estiveres a usar o TemplarUser do professor:
-        java.security.PrivateKey privKey = myUser.getPrivateKey();
-        java.security.PublicKey pubKey = myUser.getPublicKey();
+            // 2. Obter as chaves do utilizador logado
+            java.security.PrivateKey privKey = user.getPrivateKey();
+            java.security.PublicKey pubKey = user.getPublicKey();
 
-        // 3. Criar o pacote seguro (Assinar)
-        String transacaoSegura = TemplarTransaction.create(dadosDoAtivo, privKey, pubKey);
+            // 3. Criar o pacote seguro (Base64 + Assinatura)
+            String transacaoSegura = TemplarTransaction.create(dadosDoAtivo, privKey, pubKey);
 
-        // 4. Enviar para a rede via RMI
-        myremoteObject.addTransaction(transacaoSegura);
-        
-        // Limpar o campo
-        txtTransaction.setText("");
-        
-    } catch (Exception ex) {
-        JOptionPane.showMessageDialog(this, "Erro ao criar RWA: " + ex.getMessage());
-        ex.printStackTrace();
-    }
+            // 4. Enviar para a rede via RMI
+            remoteObject.addTransaction(transacaoSegura);
+            
+            JOptionPane.showMessageDialog(this, "RWA Enviado com sucesso!");
+            
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "Erro ao criar RWA: " + ex.getMessage());
+            ex.printStackTrace();
+        }
 
     }//GEN-LAST:event_btAddTransactionActionPerformed
 
     private void btGetTransactionsActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btGetTransactionsActionPerformed
-        List<TemplarTransaction> tr = getTransactions();
-        StringBuilder txt = new StringBuilder();
-        for (TemplarTransaction t : tr) {
-            txt.append(t.toString()).append("\n");
+        try {
+            // Obter a lista de Strings da rede (já não são objetos serializados!)
+            List<String> rawTransactions = remoteObject.getTransactions();
+            
+            StringBuilder sb = new StringBuilder();
+            sb.append("::: LIVRO DE REGISTOS RWA :::\n\n");
+            
+            for (String rawTx : rawTransactions) {
+                // Verificar se é válida
+                if (TemplarTransaction.isValid(rawTx)) {
+                    // Descodificar para ler o conteúdo
+                    String dadosLegiveis = TemplarTransaction.getData(rawTx);
+                    sb.append("[VÁLIDO] ").append(dadosLegiveis).append("\n");
+                    sb.append("--------------------------------------------------\n");
+                } else {
+                    sb.append("[INVÁLIDO] Transação adulterada detetada!\n\n");
+                }
+            }
+            txtTransactions.setText(sb.toString());
+            
+        } catch (RemoteException ex) {
+            System.getLogger(TemplarCoin.class.getName()).log(System.Logger.Level.ERROR, (String) null, ex);
         }
-        txtTransactions.setText(txt.toString());
     }//GEN-LAST:event_btGetTransactionsActionPerformed
 
     /**
