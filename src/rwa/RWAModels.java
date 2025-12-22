@@ -1,8 +1,10 @@
 package rwa;
 
 import java.io.Serializable;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import utils.Serializer;
 
 // ==========================================
 // MODELO DE CARTEIRA (IDENTIDADE)
@@ -122,13 +124,39 @@ class TransacaoRWA implements Serializable {
     }
 }
 
-// Utilitário simples local para Hash
+
 class UtilsRWA {
+    
     public static String gerarHash(String input) {
         try {
             java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(input.getBytes("UTF-8"));
-            return java.util.Base64.getEncoder().encodeToString(hash);
+            return Base64.getEncoder().encodeToString(hash);
         } catch (Exception ex) { return "" + System.currentTimeMillis(); }
+    }
+
+    // [NOVO] Converte TransacaoRWA para String Base64
+    public static String transacaoParaTexto(TransacaoRWA tx) {
+        try {
+            byte[] bytes = Serializer.objectToByteArray(tx);
+            return Base64.getEncoder().encodeToString(bytes);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    // [NOVO] Converte String Base64 de volta para TransacaoRWA
+    public static TransacaoRWA textoParaTransacao(String texto) {
+        try {
+            byte[] bytes = Base64.getDecoder().decode(texto);
+            Object obj = Serializer.byteArrayToObject(bytes);
+            if (obj instanceof TransacaoRWA) {
+                return (TransacaoRWA) obj;
+            }
+        } catch (Exception e) {
+            // Se falhar, é porque não é uma transação RWA (pode ser texto normal)
+        }
+        return null;
     }
 }

@@ -1,264 +1,348 @@
 package rwa;
 
-import blockchain.Block;
+import blockchain.*;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.GridLayout;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.rmi.RemoteException;
 import javax.swing.*;
+import utils.RMI;
+import utils.Utils;
 
-public class RWAWalletGui extends JFrame {
+public class RWAWalletGui extends JFrame implements Nodelistener, MinerListener {
 
-    private RWAService service;
+    private RemoteNodeObject myNode; // O nosso Nó P2P
     private JTextArea txtLog;
     private String usuario;
+    
+    // Componentes de Rede
+    private JTextField txtPorta, txtVizinho;
+    private JButton btnStart, btnConnect;
 
     public RWAWalletGui() {
-        // Login simples
-        usuario = JOptionPane.showInputDialog("Nome da Carteira (Login):", "Utilizador1");
+        // 1. Login
+        usuario = JOptionPane.showInputDialog("Nome da Carteira:", "User1");
         if (usuario == null || usuario.trim().isEmpty()) System.exit(0);
-
-        try {
-            service = new RWAService(usuario);
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Erro crítico ao iniciar: " + e.getMessage());
-            System.exit(1);
-        }
-
-        configurarJanela();
         
-        // Verifica se o usuário já existe na blockchain
-        if (!service.isRegistada()) {
-            log("!!! ATENÇÃO !!!\nA carteira '" + usuario + "' não está registada na Blockchain.\nVocê deve usar a Opção 0 para criar a sua identidade antes de fazer qualquer outra coisa.");
-        } else {
-            log("Bem-vindo de volta, " + usuario + ". Sistema sincronizado.");
-        }
+        configurarJanela();
     }
 
     private void configurarJanela() {
-        setTitle("RWA Blockchain Wallet - Logado como: " + usuario);
-        setSize(900, 650);
+        setTitle("RWA P2P Wallet - " + usuario);
+        setSize(1000, 700);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
-        // Painel de Log (Centro)
-        txtLog = new JTextArea();
+        // --- PAINEL TOPO: REDE ---
+        JPanel pnlRede = new JPanel(new GridLayout(1, 4, 5, 5));
+        pnlRede.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        
+        txtPorta = new JTextField("10010"); 
+        txtPorta.setBorder(BorderFactory.createTitledBorder("Minha Porta"));
+        
+        btnStart = new JButton("1. Iniciar Nó");
+        btnStart.addActionListener(e -> iniciarServidor());
+        
+        txtVizinho = new JTextField("127.0.0.1:10010"); 
+        txtVizinho.setBorder(BorderFactory.createTitledBorder("Vizinho (IP:Porta)"));
+        
+        btnConnect = new JButton("2. Conectar");
+        btnConnect.addActionListener(e -> conectarRede());
+        
+        pnlRede.add(txtPorta); pnlRede.add(btnStart);
+        pnlRede.add(txtVizinho); pnlRede.add(btnConnect);
+        add(pnlRede, BorderLayout.NORTH);
+
+        // --- PAINEL CENTRO: LOG ---
+        txtLog = new JTextArea(); 
         txtLog.setEditable(false);
-        txtLog.setFont(new java.awt.Font("Monospaced", 0, 14));
+        txtLog.setFont(new java.awt.Font("Monospaced", 0, 12));
         add(new JScrollPane(txtLog), BorderLayout.CENTER);
 
-        // Painel de Botões (Menu Esquerdo)
-        JPanel panelMenu = new JPanel(new GridLayout(0, 1, 5, 5)); // Uma coluna
-
-        // BOTÃO DE REGISTO (Destacado)
-        JButton btnRegistar = new JButton("0 - REGISTAR CARTEIRA (Obrigatório)");
-        btnRegistar.setBackground(new Color(200, 255, 200)); // Verde claro
-        btnRegistar.addActionListener(e -> acaoRegistarCarteira());
-        panelMenu.add(btnRegistar);
+        // --- PAINEL ESQUERDA: MENU RWA ---
+        JPanel pnlMenu = new JPanel(new GridLayout(0, 1, 5, 5));
+        pnlMenu.setBorder(BorderFactory.createTitledBorder("Menu RWA"));
         
-        panelMenu.add(new JSeparator());
-
-        adicionarBotao(panelMenu, "1 - Registar novo RWA", e -> acaoRegistarRWA());
-        adicionarBotao(panelMenu, "2 - Listar RWAs", e -> acaoListarRWAs());
-        adicionarBotao(panelMenu, "3 - Validar RWA", e -> acaoValidarRWA());
-        adicionarBotao(panelMenu, "4 - Mostrar Blockchain", e -> acaoMostrarBlockchain());
-        adicionarBotao(panelMenu, "5 - Registar Renda", e -> acaoRegistarRenda());
-        adicionarBotao(panelMenu, "6 - Listar Rendas", e -> log("=== Histórico de Rendas ===\n" + String.join("\n", service.getHistoricoRendas())));
-        adicionarBotao(panelMenu, "7 - Ver Meus Saldos", e -> log("=== Meus Saldos ===\n" + service.getMeusSaldos()));
-        adicionarBotao(panelMenu, "8 - Transferir Tokens (Direto)", e -> acaoTransferir());
+        // Registo
+        JButton btnReg = new JButton("0 - REGISTAR ID");
+        btnReg.setBackground(new Color(200, 255, 200));
+        btnReg.addActionListener(e -> enviarTransacao(TransacaoRWA.Tipo.REGISTAR_CARTEIRA, null));
+        pnlMenu.add(btnReg);
         
-        // Separador Visual
-        panelMenu.add(new JSeparator());
-        panelMenu.add(new JLabel("--- MERCADO SECUNDÁRIO ---", SwingConstants.CENTER));
-
-        adicionarBotao(panelMenu, "9 - [MERCADO] Criar Ordem Venda", e -> acaoCriarOrdem());
-        adicionarBotao(panelMenu, "10 - [MERCADO] Comprar Tokens", e -> acaoComprarTokens());
-        adicionarBotao(panelMenu, "11 - [MERCADO] Confirmar Venda", e -> acaoConfirmarVenda());
-
-        // Adiciona o painel à esquerda dentro de um ScrollPane caso a tela seja pequena
-        add(new JScrollPane(panelMenu), BorderLayout.WEST);
+        adicionarBotao(pnlMenu, "1 - Novo Imóvel", e -> acaoNovoRWA());
+        adicionarBotao(pnlMenu, "2 - Listar Imóveis", e -> listarRWA());
+        adicionarBotao(pnlMenu, "3 - Validar Imóvel", e -> acaoValidar());
+        adicionarBotao(pnlMenu, "4 - Transferir Tokens", e -> acaoTransferir());
+        adicionarBotao(pnlMenu, "5 - Meus Saldos", e -> verSaldos());
+        adicionarBotao(pnlMenu, "6 - Registar Renda", e -> acaoRenda());
+        adicionarBotao(pnlMenu, "7 - Ver Blockchain", e -> verChain());
+        
+        pnlMenu.add(new JSeparator());
+        
+        // Mercado
+        adicionarBotao(pnlMenu, "8 - [MKT] Vender", e -> acaoVender());
+        adicionarBotao(pnlMenu, "9 - [MKT] Comprar", e -> acaoComprar());
+        adicionarBotao(pnlMenu, "10 - [MKT] Confirmar", e -> acaoConfirmarVenda());
+        
+        pnlMenu.add(new JSeparator());
+        
+        // Mineração
+        JButton btnMine = new JButton("⛏️ MINERAR BLOCO");
+        btnMine.setBackground(Color.ORANGE);
+        btnMine.addActionListener(e -> acaoMinerar());
+        pnlMenu.add(btnMine);
+        
+        add(new JScrollPane(pnlMenu), BorderLayout.WEST);
     }
-
-    private void adicionarBotao(JPanel p, String label, java.awt.event.ActionListener l) {
-        JButton btn = new JButton(label);
-        btn.addActionListener(l);
-        p.add(btn);
-    }
-
-    // ================= AÇÕES =================
     
-    private void acaoRegistarCarteira() {
-        if (service.isRegistada()) {
-            log("ERRO: Esta carteira já está registada.");
-            return;
-        }
-        int confirm = JOptionPane.showConfirmDialog(this, "Deseja registar a identidade '" + usuario + "' na Blockchain?\nIsso irá minerar um bloco.");
-        if (confirm == JOptionPane.YES_OPTION) {
-            executarAsync(() -> {
-                try {
-                    service.registrarCarteira();
-                } catch (Exception ex) {
-                    Logger.getLogger(RWAWalletGui.class.getName()).log(Level.SEVERE, null, ex);
-                }
-            });
-        }
-    }
-
-    private void acaoRegistarRWA() {
-        String id = JOptionPane.showInputDialog("ID único do Imóvel:");
-        String nome = JOptionPane.showInputDialog("Nome/Descrição do Imóvel:");
-        if (id != null && nome != null) {
-            executarAsync(() -> {
-                try {
-                    service.registrarRWA(id, nome);
-                } catch (Exception ex) {
-                    Logger.getLogger(RWAWalletGui.class.getName()).log(Level.SEVERE, null, ex);
-                }
-            });
-        }
-    }
-
-    private void acaoListarRWAs() {
-        StringBuilder sb = new StringBuilder("=== LISTA DE IMÓVEIS ===\n");
-        for (ImovelRWA r : service.getListaImoveis()) {
-            sb.append(r.toString()).append("\n");
-            sb.append("   -> Distribuição: ").append(r.distribuicaoTokens).append("\n");
-        }
-        log(sb.toString());
-    }
-
-    private void acaoValidarRWA() {
-        String id = JOptionPane.showInputDialog("ID do Imóvel para Validar:");
-        if (id != null) {
-            executarAsync(() -> {
-                try {
-                    service.validarRWA(id);
-                } catch (Exception ex) {
-                    Logger.getLogger(RWAWalletGui.class.getName()).log(Level.SEVERE, null, ex);
-                }
-            });
-        }
-    }
-
-    private void acaoMostrarBlockchain() {
-        StringBuilder sb = new StringBuilder("=== BLOCKCHAIN DATA ===\n");
-        for (Block b : service.getBlockchain().getBlocks()) {
-            sb.append(b.toStringHeader()).append("\n");
-            sb.append("DATA: ").append(b.getTransactions()).append("\n--------------------------------\n");
-        }
-        log(sb.toString());
-    }
-
-    private void acaoRegistarRenda() {
-        String id = JOptionPane.showInputDialog("ID do Imóvel:");
-        String valorStr = JOptionPane.showInputDialog("Valor Total da Renda (será distribuído):");
+    // =======================================================
+    // LÓGICA DE REDE (P2P)
+    // =======================================================
+    
+    private void iniciarServidor() {
         try {
-            double valor = Double.parseDouble(valorStr);
-            executarAsync(() -> {
-                try {
-                    service.registrarRenda(id, valor);
-                } catch (Exception ex) {
-                    Logger.getLogger(RWAWalletGui.class.getName()).log(Level.SEVERE, null, ex);
-                }
-            });
-        } catch (Exception e) { log("Valor inválido."); }
+            int port = Integer.parseInt(txtPorta.getText());
+            // Cria o nó e passa 'this' como listener para receber eventos
+            // NOTA: O RemoteNodeObject deve ter o construtor adaptado para aceitar (int port, String wallet, Listener)
+            // Se não tiver, usa o construtor padrão e define o RWAService manualmente depois.
+            myNode = new RemoteNodeObject(port, usuario, this); 
+            
+            // Inicia RMI
+            RMI.startRemoteObject(myNode, port, "remoteNode");
+            
+            btnStart.setEnabled(false);
+            log(">>> Servidor P2P iniciado na porta " + port);
+            log(">>> Estado RWA carregado.");
+        } catch (Exception e) { 
+            log("ERRO AO INICIAR: " + e.getMessage()); 
+            e.printStackTrace();
+        }
     }
-
-    private void acaoTransferir() {
-        String id = JOptionPane.showInputDialog("ID do Imóvel:");
-        String dest = JOptionPane.showInputDialog("Nome da Carteira de Destino:");
-        String qtdStr = JOptionPane.showInputDialog("Quantidade de Tokens:");
+    
+    private void conectarRede() {
+        if (myNode == null) { log("ERRO: Inicie o servidor local primeiro!"); return; }
         try {
-            int qtd = Integer.parseInt(qtdStr);
-            executarAsync(() -> {
-                try {
-                    service.transferirTokens(id, dest, qtd);
-                } catch (Exception ex) {
-                    Logger.getLogger(RWAWalletGui.class.getName()).log(Level.SEVERE, null, ex);
-                }
-            });
-        } catch (Exception e) { log("Dados inválidos."); }
-    }
-
-    // --- MERCADO UI ---
-
-    private void acaoCriarOrdem() {
-        String id = JOptionPane.showInputDialog("ID do Imóvel:");
-        String qtdStr = JOptionPane.showInputDialog("Quantidade à venda:");
-        String precoStr = JOptionPane.showInputDialog("Preço por Token:");
-        try {
-            int qtd = Integer.parseInt(qtdStr);
-            double preco = Double.parseDouble(precoStr);
-            executarAsync(() -> {
-                try {
-                    service.criarOrdemVenda(id, qtd, preco);
-                } catch (Exception ex) {
-                    Logger.getLogger(RWAWalletGui.class.getName()).log(Level.SEVERE, null, ex);
-                }
-            });
-        } catch (Exception e) { log("Erro nos dados."); }
-    }
-
-    private void acaoComprarTokens() {
-        listarMercado();
-        String idOrdem = JOptionPane.showInputDialog("Digite o ID da Ordem para Comprar:");
-        if(idOrdem != null) {
-            executarAsync(() -> {
-                try {
-                    service.comprarTokens(idOrdem);
-                } catch (Exception ex) {
-                    Logger.getLogger(RWAWalletGui.class.getName()).log(Level.SEVERE, null, ex);
-                }
-            });
+            String url = "//" + txtVizinho.getText() + "/remoteNode";
+            RemoteNodeInterface node = (RemoteNodeInterface) RMI.getRemote(url);
+            myNode.addNode(node);
+            log(">>> Conexão solicitada a " + url);
+        } catch (Exception e) { 
+            log("ERRO AO CONECTAR: " + e.getMessage()); 
         }
     }
 
-    private void acaoConfirmarVenda() {
-        listarMercado();
-        String idOrdem = JOptionPane.showInputDialog("VENDEDOR: Digite o ID da Ordem para confirmar:");
-        if(idOrdem != null) {
-            executarAsync(() -> {
-                try {
-                    service.confirmarVenda(idOrdem);
-                } catch (Exception ex) {
-                    Logger.getLogger(RWAWalletGui.class.getName()).log(Level.SEVERE, null, ex);
-                }
-            });
-        }
-    }
-
-    private void listarMercado() {
-        StringBuilder sb = new StringBuilder("=== MERCADO ATUAL ===\n");
-        for(OrdemVenda ov : service.getMercado()) {
-            sb.append(ov).append("\n");
-            if(ov.compradorInteressado != null) {
-                sb.append("   *** Comprador Aguardando Confirmação: ").append(ov.compradorInteressado).append("\n");
+    // =======================================================
+    // AÇÕES RWA (Cria TX -> Base64 -> Envia para Rede)
+    // =======================================================
+    
+    private void enviarTransacao(TransacaoRWA.Tipo tipo, Object dados) {
+        if (myNode == null) { log("ERRO: Inicie o servidor P2P."); return; }
+        
+        try {
+            // 1. Criar Transação
+            TransacaoRWA tx = new TransacaoRWA(usuario, tipo);
+            
+            // 2. Preencher Dados
+            if (tipo == TransacaoRWA.Tipo.REGISTAR_CARTEIRA) tx.dadosCarteira = new Carteira(usuario);
+            if (dados instanceof ImovelRWA) tx.dadosImovel = (ImovelRWA) dados;
+            if (dados instanceof OrdemVenda) tx.dadosOrdem = (OrdemVenda) dados;
+            
+            // Para casos específicos que usam campos soltos (transferência, validação, etc)
+            if (tipo == TransacaoRWA.Tipo.VALIDAR_RWA) tx.idRwaAlvo = (String) dados;
+            
+            // 3. Serializar para Texto (Base64)
+            String txBase64 = UtilsRWA.transacaoParaTexto(tx);
+            
+            if (txBase64 != null) {
+                // 4. Enviar para a Mempool P2P
+                myNode.addTransaction(txBase64);
+                log(">>> Transação enviada para a rede (Aguardando mineração...)");
+            } else {
+                log("ERRO: Falha na serialização.");
             }
-        }
-        log(sb.toString());
+            
+        } catch (Exception e) { log("Erro TX: " + e.getMessage()); }
+    }
+    
+    // --- Wrappers para as ações ---
+    
+    private void acaoNovoRWA() {
+        String id = JOptionPane.showInputDialog("ID Imóvel:");
+        String nome = JOptionPane.showInputDialog("Nome:");
+        if (id != null) enviarTransacao(TransacaoRWA.Tipo.REGISTAR_RWA, new ImovelRWA(id, nome, usuario));
+    }
+    
+    private void acaoValidar() {
+        String id = JOptionPane.showInputDialog("ID do Imóvel a Validar:");
+        if (id != null) enviarTransacao(TransacaoRWA.Tipo.VALIDAR_RWA, id);
+    }
+    
+    private void acaoTransferir() {
+        // Como o método genérico 'enviarTransacao' simplificado acima não cobre todos os campos,
+        // fazemos a construção manual aqui para transferências:
+        if (myNode == null) return;
+        try {
+            String id = JOptionPane.showInputDialog("ID Imóvel:");
+            String dest = JOptionPane.showInputDialog("Destinatário:");
+            int qtd = Integer.parseInt(JOptionPane.showInputDialog("Quantidade:"));
+            
+            TransacaoRWA tx = new TransacaoRWA(usuario, TransacaoRWA.Tipo.TRANSFERIR_TOKENS);
+            tx.idRwaAlvo = id;
+            tx.destinatario = dest;
+            tx.quantidade = qtd;
+            
+            myNode.addTransaction(UtilsRWA.transacaoParaTexto(tx));
+            log(">>> Pedido de transferência enviado.");
+        } catch(Exception e) { log("Erro inputs: " + e.getMessage()); }
+    }
+    
+    private void acaoRenda() {
+        if (myNode == null) return;
+        try {
+            String id = JOptionPane.showInputDialog("ID Imóvel:");
+            double valor = Double.parseDouble(JOptionPane.showInputDialog("Valor Renda:"));
+            
+            TransacaoRWA tx = new TransacaoRWA(usuario, TransacaoRWA.Tipo.REGISTAR_RENDA);
+            tx.idRwaAlvo = id;
+            tx.valorFinanceiro = valor;
+            
+            myNode.addTransaction(UtilsRWA.transacaoParaTexto(tx));
+            log(">>> Registo de renda enviado.");
+        } catch(Exception e) { log("Erro inputs: " + e.getMessage()); }
+    }
+    
+    private void acaoVender() {
+        // Criar Ordem
+        try {
+            String idRwa = JOptionPane.showInputDialog("ID Imóvel:");
+            int qtd = Integer.parseInt(JOptionPane.showInputDialog("Qtd Tokens:"));
+            double preco = Double.parseDouble(JOptionPane.showInputDialog("Preço Total:"));
+            
+            OrdemVenda ordem = new OrdemVenda("ORD-" + System.currentTimeMillis(), usuario, idRwa, qtd, preco);
+            enviarTransacao(TransacaoRWA.Tipo.MERCADO_CRIAR_ORDEM, ordem);
+        } catch(Exception e) { log("Erro: " + e.getMessage()); }
+    }
+    
+    private void acaoComprar() {
+        listarMercado();
+        String idOrdem = JOptionPane.showInputDialog("ID da Ordem para Comprar:");
+        if (idOrdem == null) return;
+        
+        try {
+            TransacaoRWA tx = new TransacaoRWA(usuario, TransacaoRWA.Tipo.MERCADO_COMPRAR);
+            // Criamos um objeto dummy apenas com o ID para identificar
+            OrdemVenda dummy = new OrdemVenda(idOrdem, "", "", 0, 0);
+            tx.dadosOrdem = dummy; 
+            
+            myNode.addTransaction(UtilsRWA.transacaoParaTexto(tx));
+            log(">>> Intenção de compra enviada.");
+        } catch(Exception e) { log("Erro: " + e.getMessage()); }
+    }
+    
+    private void acaoConfirmarVenda() {
+        String idOrdem = JOptionPane.showInputDialog("ID da Ordem para Confirmar (Vendedor):");
+        if (idOrdem == null) return;
+         try {
+            TransacaoRWA tx = new TransacaoRWA(usuario, TransacaoRWA.Tipo.MERCADO_CONFIRMAR);
+            OrdemVenda dummy = new OrdemVenda(idOrdem, "", "", 0, 0);
+            tx.dadosOrdem = dummy; 
+            
+            myNode.addTransaction(UtilsRWA.transacaoParaTexto(tx));
+            log(">>> Confirmação enviada.");
+        } catch(Exception e) { log("Erro: " + e.getMessage()); }
     }
 
-    private void log(String msg) {
+    // --- LEITURAS DE ESTADO (Local) ---
+    
+    private void listarRWA() {
+        if (myNode == null) return;
+        log("=== IMÓVEIS (Estado Local) ===");
+        for (ImovelRWA r : myNode.rwaService.getListaImoveis()) {
+            log(r.toString() + " | Dist: " + r.distribuicaoTokens);
+        }
+    }
+    
+    private void verSaldos() {
+        if (myNode == null) return;
+        log("=== MEUS SALDOS ===");
+        log(myNode.rwaService.getMeusSaldos());
+    }
+    
+    private void listarMercado() {
+        if (myNode == null) return;
+        log("=== MERCADO ===");
+        for (OrdemVenda ov : myNode.rwaService.getMercado()) {
+            log(ov.toString());
+        }
+    }
+    
+    private void verChain() {
+        if (myNode == null) return;
+        try {
+            log("=== BLOCKCHAIN ===");
+            log("Altura: " + myNode.getBlockchainSize());
+            Block last = myNode.getlastBlock();
+            if(last != null) log("Último Hash: " + last.getCurrentHash());
+        } catch (RemoteException ex) { }
+    }
+    
+    private void acaoMinerar() {
+        if (myNode == null) return;
+        try {
+            log("Iniciando mineração distribuída (Dificuldade 3)...");
+            myNode.startMiner("RWA-Block", 3);
+        } catch (RemoteException ex) { log("Erro Minerar: " + ex.getMessage()); }
+    }
+
+    // =======================================================
+    // LISTENERS (Eventos vindos do Nó)
+    // =======================================================
+
+    @Override public void onStart(String msg) { log("[NÓ] " + msg); }
+    @Override public void onConect(String end) { log("[REDE] Conectado a " + end); }
+    @Override public void onException(Exception e, String title) { log("[ERRO] " + title + ": " + e.getMessage()); }
+    
+    @Override 
+    public void onTransaction(String transaction) { 
+        // Apenas notificação visual
+        // log("Nova Transação na Pool...");
+    }
+    
+    @Override 
+    public void onBlockchain(BlockChain b) { 
         SwingUtilities.invokeLater(() -> {
-            txtLog.setText(msg + "\n\n" + txtLog.getText()); // Adiciona no topo
-            txtLog.setCaretPosition(0);
+            log(">>> BLOCKCHAIN ATUALIZADA! Nova altura: " + b.getSize());
+            log(">>> Estado RWA recalculado.");
+        }); 
+    }
+
+    // Eventos do Minerador
+    @Override public void onStartMining(String msg, int dif) { log(">>> A MINERAR... (Dif: " + dif + ")"); }
+    @Override public void onStopMining(int nonce) { log(">>> Mineração parada."); }
+    @Override 
+    public void onNonceFound(int nonce) { 
+        SwingUtilities.invokeLater(() -> {
+            log("🏆 SUCESSO! Nonce encontrado: " + nonce);
+            log("O bloco será propagado e o estado atualizado.");
+            
+            // Importante: No RemoteNodeObject, onNonceFound já trata de parar e adicionar o bloco.
+            // Aqui apenas mostramos a festa.
         });
     }
 
-    // Executa operações de blockchain numa thread separada para não travar a GUI
-    private void executarAsync(Runnable r) {
-        new Thread(() -> {
-            try {
-                r.run();
-                log("SUCESSO: Bloco Minerado e Transação confirmada.");
-            } catch (Exception e) {
-                log("ERRO NA OPERAÇÃO: " + e.getMessage());
-            }
-        }).start();
+    // Auxiliares
+    private void log(String m) { 
+        txtLog.append(m + "\n"); 
+        txtLog.setCaretPosition(txtLog.getDocument().getLength()); 
     }
-
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new RWAWalletGui().setVisible(true));
+    
+    private void adicionarBotao(JPanel p, String l, java.awt.event.ActionListener a) { 
+        JButton b = new JButton(l); 
+        b.addActionListener(a); 
+        p.add(b); 
+    }
+    
+    public static void main(String[] args) { 
+        SwingUtilities.invokeLater(() -> new RWAWalletGui().setVisible(true)); 
     }
 }
