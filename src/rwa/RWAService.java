@@ -9,10 +9,10 @@ import java.util.Map;
 
 public class RWAService {
     
-    private BlockChain blockchain;
-    private String carteiraAtual; // Nome do utilizador local
+    // O service agora não "tem" a blockchain, ele apenas a processa quando pedido
+    private String carteiraAtual;
 
-    // ESTADO MUNDIAL (Recalculado a partir da blockchain)
+    // ESTADO (Memória)
     private Map<String, ImovelRWA> imoveis = new HashMap<>();
     private Map<String, OrdemVenda> mercado = new HashMap<>();
     private Map<String, Carteira> carteirasRegistadas = new HashMap<>(); 
@@ -20,44 +20,26 @@ public class RWAService {
 
     public RWAService(String nomeCarteira) {
         this.carteiraAtual = nomeCarteira;
-        
-        // Tenta carregar a blockchain. Se falhar, inicia com null (o Nó tratará de criar/sincronizar)
-        try {
-            this.blockchain = BlockChain.load("rwa_chain/chain.bch");
-        } catch (Exception e) {
-            System.out.println("Blockchain local não encontrada ou erro de leitura.");
-            this.blockchain = null;
-        }
-        
-        // Se a blockchain existir, reconstrói o estado imediatamente
-        if (this.blockchain != null) {
-            sincronizarEstado();
-        }
     }
 
-    // =================================================================
-    // CORE: STATE REPLAY (Ler Strings Base64 -> Objetos -> Estado)
-    // =================================================================
-    public void sincronizarEstado() {
+    // Método para atualizar o estado lendo uma Blockchain externa
+    public void atualizarEstado(BlockChain blockchain) {
         if (blockchain == null) return;
 
-        // Limpar estado atual para reconstruir do zero
+        // Limpar tudo
         imoveis.clear();
         mercado.clear();
         historicoRendas.clear();
         carteirasRegistadas.clear();
 
-        // Percorrer todos os blocos
+        // Ler todos os blocos
         for (Block b : blockchain.getBlocks()) {
-            // No sistema original, getTransactions retorna uma lista de Strings/Objects
-            List<Object> transacoesRaw = b.getTransactions(); 
+            // O teu Block original retorna List<String> ou List<Object>
+            List<Object> transacoes = b.getTransactions(); 
             
-            for (Object obj : transacoesRaw) {
-                String txStr = obj.toString(); // Garante que temos a String Base64
-                
-                // Converte Base64 -> Objeto TransacaoRWA
-                TransacaoRWA tx = UtilsRWA.textoParaTransacao(txStr);
-                
+            for (Object obj : transacoes) {
+                // Tenta converter o texto (Base64) para TransacaoRWA
+                TransacaoRWA tx = UtilsRWA.textoParaTransacao(obj.toString());
                 if (tx != null) {
                     processarTransacao(tx);
                 }
@@ -77,15 +59,11 @@ public class RWAService {
         // 2. Outras Transações
         switch (tx.tipo) {
             case REGISTAR_RWA:
-                if (tx.dadosImovel != null) {
-                    imoveis.put(tx.dadosImovel.id, tx.dadosImovel);
-                }
+                if (tx.dadosImovel != null) imoveis.put(tx.dadosImovel.id, tx.dadosImovel);
                 break;
                 
             case VALIDAR_RWA:
-                if (imoveis.containsKey(tx.idRwaAlvo)) {
-                    imoveis.get(tx.idRwaAlvo).estado = "VALIDADO";
-                }
+                if (imoveis.containsKey(tx.idRwaAlvo)) imoveis.get(tx.idRwaAlvo).estado = "VALIDADO";
                 break;
                 
             case TRANSFERIR_TOKENS:
@@ -99,15 +77,12 @@ public class RWAService {
             case REGISTAR_RENDA:
                 ImovelRWA rwa = imoveis.get(tx.idRwaAlvo);
                 if (rwa != null) {
-                    historicoRendas.add(String.format("RENDA: %s gerou $%.2f (Data: %d)", 
-                            rwa.nome, tx.valorFinanceiro, tx.timestamp));
+                    historicoRendas.add(String.format("RENDA: %s gerou $%.2f", rwa.nome, tx.valorFinanceiro));
                 }
                 break;
 
             case MERCADO_CRIAR_ORDEM:
-                if (tx.dadosOrdem != null) {
-                    mercado.put(tx.dadosOrdem.idOrdem, tx.dadosOrdem);
-                }
+                if (tx.dadosOrdem != null) mercado.put(tx.dadosOrdem.idOrdem, tx.dadosOrdem);
                 break;
 
             case MERCADO_COMPRAR:
@@ -133,36 +108,20 @@ public class RWAService {
         }
     }
 
-    // =================================================================
-    // GETTERS E HELPERS
-    // =================================================================
-    
-    // Método chamado pelo Nó Remoto para injetar uma nova blockchain recebida da rede
-    public void setBlockchain(BlockChain b) {
-        this.blockchain = b;
-        sincronizarEstado();
-    }
-    
-    public BlockChain getBlockchain() { return blockchain; }
-
+    // GETTERS
     public List<ImovelRWA> getListaImoveis() { return new ArrayList<>(imoveis.values()); }
     public List<String> getHistoricoRendas() { return historicoRendas; }
     public List<OrdemVenda> getMercado() { return new ArrayList<>(mercado.values()); }
-    public boolean isRegistada() { return carteirasRegistadas.containsKey(carteiraAtual); }
     
     public String getMeusSaldos() {
         StringBuilder sb = new StringBuilder();
-        sb.append("Estado da Conta: ").append(isRegistada() ? "REGISTADA" : "NÃO REGISTADA").append("\n\n");
-        
-        boolean temAlgo = false;
+        if (carteirasRegistadas.containsKey(carteiraAtual)) sb.append("[CONTA REGISTADA]\n\n");
+        else sb.append("[CONTA NÃO REGISTADA]\n\n");
+
         for(ImovelRWA rwa : imoveis.values()) {
             int saldo = rwa.distribuicaoTokens.getOrDefault(carteiraAtual, 0);
-            if(saldo > 0) {
-                sb.append(String.format("- %s (ID: %s): %d Tokens\n", rwa.nome, rwa.id, saldo));
-                temAlgo = true;
-            }
+            if(saldo > 0) sb.append(String.format("- %s (ID: %s): %d Tokens\n", rwa.nome, rwa.id, saldo));
         }
-        if(!temAlgo) sb.append("Sem tokens em carteira.");
-        return sb.toString();
+        return sb.length() == 0 ? sb.toString() + "Sem tokens." : sb.toString();
     }
 }
